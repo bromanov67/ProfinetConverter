@@ -1,21 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="MediatR" Version="14.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="10.1.1" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="10.1.1" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ProfinetApi.Application\ProfinetApi.Application.csproj" />
-    <ProjectReference Include="..\ProfinetApi.Infrastructure\ProfinetApi.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProfinetApi.Domain\ProfinetApi.Domain.csproj" />
   </ItemGroup>
 
 </Project>

@@ -4,6 +4,16 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="../ProfinetConverter/ProfinetConverter/ProfinetConverter.vcxproj" />
-  <Project Path="ProfinetApi/ProfinetApi.csproj" />
+  <Project Path="ProfinetApi.Application/ProfinetApi.Application.csproj" Id="7328f96e-6138-4390-a462-45ee5ddf243f">
+    <BuildDependency Project="ProfinetApi.Domain/ProfinetApi.Domain.csproj" />
+  </Project>
+  <Project Path="ProfinetApi.Domain/ProfinetApi.Domain.csproj" Id="dd9de63e-0b92-408c-aef7-aab5719ee9c2" />
+  <Project Path="ProfinetApi.Infrastructure/ProfinetApi.Infrastructure.csproj" Id="568c1e6b-1d4c-48eb-88dc-f02305ce6afa">
+    <BuildDependency Project="ProfinetApi.Application/ProfinetApi.Application.csproj" />
+    <BuildDependency Project="ProfinetApi.Domain/ProfinetApi.Domain.csproj" />
+  </Project>
+  <Project Path="ProfinetApi/ProfinetApi.csproj">
+    <BuildDependency Project="ProfinetApi.Application/ProfinetApi.Application.csproj" />
+    <BuildDependency Project="ProfinetApi.Infrastructure/ProfinetApi.Infrastructure.csproj" />
+  </Project>
 </Solution>
