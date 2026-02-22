@@ -1,89 +1,187 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
-
-const API_URL = 'http://localhost:5000/api'
-const STORAGE_KEY = 'profinet_projects'
+import { ref } from 'vue'
+import apiClient from '../services/apiClient'
 
 export const useDeviceStore = defineStore('device', () => {
-  const loadProjects = () => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch (e) {
-        console.error('Ошибка при загрузке данных:', e)
-        return getDefaultProjects()
-      }
+
+  // ─── STATE ───────────────────────────────────────────────────────────────
+  const projects    = ref([])
+  const selectedNode = ref(null)
+  const hoveredModule = ref(null)
+  const loading     = ref(false)
+  const error       = ref(null)
+  
+
+  // ─── PROJECTS ────────────────────────────────────────────────────────────
+
+  const loadProjects = async () => {
+    loading.value = true
+    error.value   = null
+    try {
+      const response = await apiClient.get('/projects')
+      projects.value = response.data
+    } catch (err) {
+      error.value = 'Не удалось загрузить проекты'
+      console.error(err)
+    } finally {
+      loading.value = false
     }
-    return getDefaultProjects()
   }
 
-  const getDefaultProjects = () => [
-    {
-      id: 'proj-1',
-      name: 'PROFINET Converter',
-      type: 'project',
-      children: [
-        {
-          id: 'server-1',
-          name: 'PROFINET Server',
-          type: 'server',
-          active: true,
-          address: 1,
-          description: '',
-          protocolVersion: 'V0',
-          masterClass: 'Class 1',
-          children: [
-            {
-              id: 'bus-1',
-              name: 'Ethernet Interface',
-              type: 'interface',
-              active: true,
-              deviceAddress: 1,
-              port: 'COM1',
-              speed: 9600,
-              busLevel: 0,
-              deviceType: 'serial',
-              children: [
-                {
-                  id: 'station-1',
-                  name: 'Station',
-                  type: 'station',
-                  active: true,
-                  address: 1,
-                  description: 'Станция 1',
-                  configuration: {
-                    identifier: '',
-                    manufacturer: '',
-                    model: '',
-                    version: '',
-                    consistency: ''
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
+  const addProject = async (name) => {
+    loading.value = true
+    try {
+      await apiClient.post('/projects', { name })
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка при создании проекта'
+      console.error(err)
+    } finally {
+      loading.value = false
     }
-  ]
+  }
 
-  const projects = ref(loadProjects())
-  const selectedNode = ref(null)
 
-  watch(
-    () => projects.value,
-    (newProjects) => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects))
-    },
-    { deep: true }
-  )
+  // ─── SERVERS / INTERFACES / STATIONS ─────────────────────────────────────
 
-  const findNodeById = (nodeId, nodes = projects.value) => {
-    for (let node of nodes) {
+  const addServer = async (projectId, name) => {
+    loading.value = true
+    try {
+      await apiClient.post('/profinetservers', { projectId, name })
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка при добавлении сервера'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const addInterface = async (serverId, name) => {
+    loading.value = true
+    try {
+      await apiClient.post('/networkinterfaces', { serverId, name })
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка при добавлении интерфейса'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const addStation = async (interfaceId, name) => {
+    loading.value = true
+    try {
+      await apiClient.post('/stations', { interfaceId, name })
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка при добавлении станции'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+    const setHoveredModule = (mod) => {
+      hoveredModule.value = mod
+    }
+
+  // ─── DELETE ───────────────────────────────────────────────────────────────
+
+  const deleteNode = async (nodeId) => {
+    loading.value = true
+    try {
+      await apiClient.delete(`/nodes/${nodeId}`)
+      if (selectedNode.value?.id === nodeId) {
+        selectedNode.value = null
+      }
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка при удалении'
+      console.error(err)
+    } finally {
+      loading.value = false
+    }
+  }
+
+
+  // ─── GSDML IMPORT ─────────────────────────────────────────────────────────
+
+  const importGsdml = async (stationId, file) => {
+    loading.value = true
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      await apiClient.post(`/stations/${stationId}/import-gsdml`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      await loadProjects()
+    } catch (err) {
+      error.value = 'Ошибка импорта GSDML'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+
+  // ─── SLOTS ────────────────────────────────────────────────────────────────
+
+  /**
+   * Назначает модуль в слот указанной станции.
+   * module = null → очищает слот.
+   */
+  const assignModule = (stationId, slotNumber, module) => {
+    // Ищем станцию в реактивном дереве проектов
+    for (const proj of projects.value) {
+      for (const srv of proj.servers ?? []) {
+        for (const iface of srv.interfaces ?? []) {
+          const station = (iface.stations ?? []).find(s => s.id === stationId)
+          if (!station) continue
+
+          const slot = station.configuration?.slots?.find(s => s.number === slotNumber)
+          if (slot) {
+            slot.module = module
+
+            // Если этот слот сейчас открыт в DetailsPanel — обновляем и там
+            const activeSlotId = `${stationId}__slot__${slotNumber}`
+            if (selectedNode.value?.id === activeSlotId) {
+              selectedNode.value = {
+                ...selectedNode.value,
+                module,
+                name: module
+                  ? `${String(slotNumber).padStart(2, '0')}: ${module.name}`
+                  : `${String(slotNumber).padStart(2, '0')}: <пусто>`
+              }
+            }
+          }
+          return  // Станция найдена, выходим
+        }
+      }
+    }
+  }
+
+  /** Очищает модуль из слота */
+  const clearSlotModule = (stationId, slotNumber) => {
+    assignModule(stationId, slotNumber, null)
+
+    // Если открытый слот именно этот — сбрасываем selectedNode
+    const activeSlotId = `${stationId}__slot__${slotNumber}`
+    if (selectedNode.value?.id === activeSlotId) {
+      selectedNode.value = null
+    }
+  }
+
+
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+  const findNodeById = (nodeId, nodes) => {
+    const list = nodes ?? projects.value
+    for (const node of list) {
       if (node.id === nodeId) return node
-      if (node.children) {
-        const found = findNodeById(nodeId, node.children)
+      const children = node.children ?? node.servers ?? node.interfaces ?? node.stations
+      if (children?.length) {
+        const found = findNodeById(nodeId, children)
         if (found) return found
       }
     }
@@ -94,139 +192,32 @@ export const useDeviceStore = defineStore('device', () => {
     selectedNode.value = node
   }
 
-  const addServer = (name) => {
-    const newServer = {
-      id: `server-${Date.now()}`,
-      name: 'PROFINET Server',
-      type: 'server',
-      active: true,
-      address: 1,
-      description: '',
-      protocolVersion: 'V0',
-      masterClass: 'Class 1'
-     ,
-      children: [
-        {
-          id: `bus-${Date.now()}`,
-          name: 'Ethernet Interface',
-          type: 'interface',
-          active: true,
-          deviceAddress: 1,
-          port: 'COM1',
-          speed: 9600,
-          busLevel: 0,
-          deviceType: 'serial',
-          children: [
-            {
-              id: `station-${Date.now()}`,
-              name: 'Station',
-              type: 'station',
-              active: true,
-              address: 1,
-              description: 'New Station',
-              configuration: {
-                identifier: 'Station1',
-                manufacturer: '',
-                model: '',
-                version: '1.0.0',
-                consistency: ''
-              }
-            }
-          ]
-        }
-      ]
-    }
 
-    projects.value[0].children.push(newServer)
-  }
-
-  const addInterface = (parentId) => {
-    const parent = findNodeById(parentId)
-    if (parent && parent.type === 'server') {
-      parent.children = parent.children || []
-      parent.children.push({
-        id: `bus-${Date.now()}`,
-        name: 'Ethernet Interface',
-        type: 'interface',
-        active: true,
-        deviceAddress: 1,
-        port: 'COM1',
-        speed: 9600,
-        busLevel: 0,
-        deviceType: 'serial',
-        children: []
-      })
-    }
-  }
-
-  const addStation = (parentId) => {
-    const parent = findNodeById(parentId)
-    if (parent && parent.type === 'interface') {
-      parent.children = parent.children || []
-      parent.children.push({
-        id: `station-${Date.now()}`,
-        name: 'Station',
-        type: 'station',
-        active: true,
-        address: parent.children.length + 1,
-        description: `Station ${parent.children.length + 1}`,
-        configuration: {
-          identifier: `Station${parent.children.length + 1}`,
-          manufacturer: '',
-          model: '',
-          version: '1.0.0',
-          consistency: ''
-        }
-      })
-    }
-  }
-
-  const deleteNode = (nodeId) => {
-    const deleteRecursive = (nodes) => {
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].id === nodeId) {
-          nodes.splice(i, 1)
-          return true
-        }
-        if (nodes[i].children && deleteRecursive(nodes[i].children)) {
-          return true
-        }
-      }
-      return false
-    }
-    deleteRecursive(projects.value)
-    if (selectedNode.value?.id === nodeId) {
-      selectedNode.value = null
-    }
-  }
-
-  const clearAllData = () => {
-    projects.value = getDefaultProjects()
-    selectedNode.value = null
-    localStorage.removeItem(STORAGE_KEY)
-  }
-
-  const importGSDML = (nodeId, gsdmlData) => {
-    const station = findNodeById(nodeId)
-    if (station && station.type === 'station') {
-      station.configuration.identifier = gsdmlData.identifier || station.configuration.identifier
-      station.configuration.manufacturer = gsdmlData.manufacturer || station.configuration.manufacturer
-      station.configuration.model = gsdmlData.model || station.configuration.model
-      station.configuration.version = gsdmlData.version || station.configuration.version
-      station.description = gsdmlData.description || station.description
-    }
-  }
+  // ─── EXPOSE ───────────────────────────────────────────────────────────────
 
   return {
+    // state
     projects,
     selectedNode,
-    selectNode,
-    findNodeById,
+    loading,
+    error,
+
+    // actions
+    loadProjects,
+    addProject,
     addServer,
     addInterface,
     addStation,
     deleteNode,
-    clearAllData,
-    importGSDML
+    importGsdml,
+
+    assignModule,     
+    clearSlotModule,  
+
+    findNodeById,
+    selectNode,
+
+    hoveredModule,
+    setHoveredModule,
   }
 })
