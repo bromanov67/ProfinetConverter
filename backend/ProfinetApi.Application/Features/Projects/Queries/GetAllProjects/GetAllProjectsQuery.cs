@@ -1,13 +1,15 @@
 ﻿using MediatR;
 using ProfinetApi.Application.DTOs;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.Entities.IEC104;
+using ProfinetApi.Domain.Entities.Profinet;
+using ProfinetApi.Domain.RepoInterfaces; // или ProfinetApi.Domain.Interfaces, проверьте свой using
 using System.Text.Json;
 
 namespace ProfinetApi.Application.Features.Projects.Queries.GetAllProjects;
 
-public record GetAllProjectsQuery : IRequest<IEnumerable<ProjectDto>>;
+public record GetAllProjectsQuery : IRequest<IEnumerable<object>>;
 
-public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, IEnumerable<ProjectDto>>
+public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, IEnumerable<object>>
 {
     private readonly IProjectRepository _repository;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -15,76 +17,149 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
     public GetAllProjectsQueryHandler(IProjectRepository repository)
     {
         _repository = repository;
-        // Настраиваем парсинг так, чтобы он не зависел от регистра символов
-        _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
     }
 
-    public async Task<IEnumerable<ProjectDto>> Handle(GetAllProjectsQuery request, CancellationToken ct)
+    public async Task<IEnumerable<object>> Handle(GetAllProjectsQuery request, CancellationToken ct)
     {
         var projects = await _repository.GetAllAsync(ct);
 
-        // Полный маппинг всего дерева
-        return projects.Select(p => new ProjectDto(
-            p.Id,
-            p.Name,
-            "project",
-            p.CreatedAt,
-            p.Servers.Select(server => new ProfinetServerDto(
-                 server.Id,
-                 server.Name,
-                 "server",
-                 true,
-                 0,
-                 server.Interfaces.Select(iface => new NetworkInterfaceDto(
-                      iface.Id,
-                      iface.Name,
-                      "interface",
-                      iface.Active,
-                      iface.Stations.Select(s =>
-                      {
-                          // 1. Десериализуем данные из JSON строки
-                          var parsedConfig = !string.IsNullOrEmpty(s.ConfigurationData)
-                              ? JsonSerializer.Deserialize<StationConfigDto>(s.ConfigurationData, _jsonOptions)
-                              : null;
+        return projects.Select(p => new
+        {
+            id = p.Id,
+            name = p.Name,
+            type = "project",
+            createdAt = p.CreatedAt,
+            servers = p.Servers.Select(server =>
+            {
+                // ---- ОБРАБОТКА PROFINET СЕРВЕРА ----
+                if (server is ProfinetServer ps)
+                {
+                    return (object)new
+                    {
+                        id = ps.Id,
+                        name = ps.Name,
+                        type = "server_profinet",
+                        active = ps.Active,
+                        address = ps.Address,
+                        interfaces = ps.Interfaces.OfType<ProfinetInterface>().Select(iface => new
+                        {
+                            id = iface.Id,
+                            name = iface.Name,
+                            type = "interface_profinet",
+                            active = iface.Active,
+                            stations = iface.Stations.Select(s =>
+                            {
+                                StationConfigDto? parsedConfig = null;
+                                if (!string.IsNullOrEmpty(s.ConfigurationData))
+                                {
+                                    try
+                                    {
+                                        parsedConfig = JsonSerializer.Deserialize<StationConfigDto>(s.ConfigurationData, _jsonOptions);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"Parse error for station {s.Id}: {ex.Message}");
+                                    }
+                                }
 
-                          // 2. Извлекаем слоты и модули (или задаем пустые списки)
-                          var slots = parsedConfig?.Slots ?? new List<GsdmlSlotDto>();
-                          var modules = parsedConfig?.Modules ?? new List<GsdmlModuleDto>();
+                                // Используем инициализатор объекта. Он работает независимо от порядка полей и 
+                                // не сломается, если вы добавите новые поля в DTO.
+                                return new
+                                {
+                                    id = s.Id,
+                                    name = s.Name,
+                                    type = "station",
+                                    active = s.Active,
+                                    address = s.Address,
+                                    description = s.Description ?? "",
+                                    configuration = parsedConfig ?? new StationConfigDto
+                                    {
+                                        Id = s.ConfigIdentifier ?? "",
+                                        Manufacturer = s.ConfigManufacturer ?? "",
+                                        Model = s.ConfigModel ?? "",
+                                        Version = s.ConfigVersion ?? "",
+                                        ShortDesignation = "Fast Ethernet",
+                                        DeviceDescription = "",
+                                        ArticleNo = "",
+                                        FirmwareVersion = "",
+                                        HardwareVersion = "1",
+                                        GsdFile = "",
+                                        ProfinetDeviceName = "",
+                                        IpAddress = "192.168.0.1",
+                                        SubnetMask = "255.255.255.0",
+                                        DeviceNumber = 1,
+                                        Consistency = "",
+                                        Slots = new List<GsdmlSlotDto>(),
+                                        Modules = new List<GsdmlModuleDto>()
+                                    }
+                                };
+                            }).ToList()
+                        }).ToList()
+                    };
+                }
 
-                          // 3. Формируем конфиг
-                          var config = new StationConfigDto(
-                          Id: s.ConfigIdentifier ?? "",
-                          Manufacturer: s.ConfigManufacturer ?? "",
-                          Model: s.ConfigModel ?? "",
-                          Version: s.ConfigVersion ?? "",
-                          ShortDesignation: parsedConfig?.ShortDesignation ?? "Fast Ethernet",
-                          DeviceDescription: parsedConfig?.DeviceDescription ?? "PROFINET IO Device function",
-                          ArticleNo: parsedConfig?.ArticleNo ?? "A02B-xxxx-J147",
-                          FirmwareVersion: parsedConfig?.FirmwareVersion ?? "",
-                          HardwareVersion: parsedConfig?.HardwareVersion ?? "1",
-                          GsdFile: parsedConfig?.GsdFile ?? "gsdml.xml",
-                          ProfinetDeviceName: parsedConfig?.ProfinetDeviceName ?? "fanuc-cnc",
-                          IpAddress: parsedConfig?.IpAddress ?? "192.168.0.1",
-                          SubnetMask: parsedConfig?.SubnetMask ?? "255.255.255.0",
-                          DeviceNumber: parsedConfig?.DeviceNumber ?? 1,
-                          Consistency: parsedConfig?.Consistency ?? "",
-                          Slots: slots,
-                          Modules: modules
-                        );
+                // ---- ОБРАБОТКА IEC 104 СЕРВЕРА ----
+                if (server is IecServer iecs)
+                {
+                    return (object)new
+                    {
+                        id = iecs.Id,
+                        name = iecs.Name,
+                        type = "server_iec104",
+                        active = iecs.Active,
+                        interfaces = iecs.Interfaces.OfType<IecInterface>().Select(iface => new
+                        {
+                            id = iface.Id,
+                            name = iface.Name,
+                            type = "interface_iec",
+                            active = iface.Active,
+                            channels = iface.Channels.Select(ch =>
+                            {
+                                IecChannelConfigDto? parsedConfig = null;
+                                if (!string.IsNullOrEmpty(ch.ConfigurationData))
+                                {
+                                    try
+                                    {
+                                        parsedConfig = JsonSerializer.Deserialize<IecChannelConfigDto>(ch.ConfigurationData, _jsonOptions);
+                                    }
+                                    catch { /* Игнорируем ошибки парсинга старых данных */ }
+                                }
 
-                          // 4. Возвращаем StationDto
-                          return new StationDto(
-                              s.Id,
-                              s.Name,
-                              "station",
-                              s.Active,
-                              s.Address,
-                              s.Description ?? "",
-                              config
-                          );
-                      }).ToList()
-                 )).ToList()
-            )).ToList()
-        ));
+                                return new
+                                {
+                                    id = ch.Id,
+                                    name = ch.Name,
+                                    type = "channel_iec",
+                                    active = ch.Active,
+                                    ipAddress = ch.IpAddress,
+                                    port = ch.Port,
+                                    timezone = ch.Timezone,
+                                    k = ch.K,
+                                    w = ch.W,
+                                    t0 = ch.T0,
+                                    t1 = ch.T1,
+                                    t2 = ch.T2,
+                                    t3 = ch.T3,
+                                    buffering = ch.Buffering,
+                                    bufferTi = ch.BufferTi,
+                                    bufferTs = ch.BufferTs,
+
+                                    // ДОБАВЛЯЕМ МАССИВЫ ПРЯМО В КАНАЛ, чтобы фронтенд их увидел
+                                    commands = parsedConfig?.Commands ?? new List<IecCommandDto>(),
+                                    signals = parsedConfig?.Signals ?? new List<IecSignalDto>()
+                                };
+                            }).ToList()
+                        }).ToList()
+                    };
+                }
+
+                return null;
+            }).Where(s => s != null).ToList()
+        });
     }
 }

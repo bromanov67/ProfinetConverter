@@ -5,13 +5,12 @@ import apiClient from '../services/apiClient'
 export const useDeviceStore = defineStore('device', () => {
 
   // ─── STATE ───────────────────────────────────────────────────────────────
-  const projects    = ref([])
+  const projects     = ref([])
   const selectedNode = ref(null)
   const hoveredModule = ref(null)
   const loading     = ref(false)
   const error       = ref(null)
   
-
   // ─── PROJECTS ────────────────────────────────────────────────────────────
 
   const loadProjects = async () => {
@@ -41,32 +40,68 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
-
   // ─── SERVERS / INTERFACES / STATIONS ─────────────────────────────────────
 
-  const addServer = async (projectId, name) => {
-    loading.value = true
+  const addServer = async (projectId, name, serverType) => {
+    loading.value = true;
     try {
-      await apiClient.post('/profinetservers', { projectId, name })
-      await loadProjects()
+      const url = serverType === 'server_iec104' 
+        ? '/api/IecServers' 
+        : '/api/ProfinetServers';
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, name }) 
+      });
+
+      if (!response.ok) throw new Error('Failed to create server');
+      
+      // Получаем только ID созданного сервера
+      const { id } = await response.json();
+
+      // Запрашиваем актуальное дерево проектов (вместе со сгенерированными станциями/интерфейсами)
+      await loadProjects();
+
+      // Выделяем свежесозданный сервер в UI
+      const newServer = findNodeById(id);
+      if (newServer) {
+        selectedNode.value = newServer;
+      }
     } catch (err) {
-      error.value = 'Ошибка при добавлении сервера'
-      throw err
+      error.value = 'Ошибка при создании сервера';
+      console.error(err);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
   const addInterface = async (serverId, name) => {
-    loading.value = true
+    loading.value = true;
     try {
-      await apiClient.post('/networkinterfaces', { serverId, name })
-      await loadProjects()
+      const response = await fetch('/api/NetworkInterfaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId, name })
+      });
+
+      if (!response.ok) throw new Error('Failed to create interface');
+      
+      const { id } = await response.json();
+
+      // Обновляем дерево проектов
+      await loadProjects();
+
+      // Выделяем созданный интерфейс
+      const newInterface = findNodeById(id);
+      if (newInterface) {
+        selectedNode.value = newInterface;
+      }
     } catch (err) {
-      error.value = 'Ошибка при добавлении интерфейса'
-      throw err
+      error.value = 'Ошибка при добавлении интерфейса';
+      console.error(err);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
@@ -82,9 +117,40 @@ export const useDeviceStore = defineStore('device', () => {
       loading.value = false
     }
   }
-    const setHoveredModule = (mod) => {
-      hoveredModule.value = mod
+  
+  const setHoveredModule = (mod) => {
+    hoveredModule.value = mod
+  }
+
+  const addIecChannel = async (interfaceId, name) => {
+    loading.value = true;
+    try {
+      // Обращаемся к нашему новому контроллеру
+      const response = await fetch('/api/Channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interfaceId, name })
+      });
+
+      if (!response.ok) throw new Error('Failed to create IEC channel');
+      
+      const { id } = await response.json();
+
+      // Обновляем дерево проектов
+      await loadProjects();
+
+      // Выделяем созданный канал
+      const newChannel = findNodeById(id);
+      if (newChannel) {
+        selectedNode.value = newChannel;
+      }
+    } catch (err) {
+      error.value = 'Ошибка при добавлении канала';
+      console.error(err);
+    } finally {
+      loading.value = false;
     }
+  }
 
   // ─── DELETE ───────────────────────────────────────────────────────────────
 
@@ -103,7 +169,6 @@ export const useDeviceStore = defineStore('device', () => {
       loading.value = false
     }
   }
-
 
   // ─── GSDML IMPORT ─────────────────────────────────────────────────────────
 
@@ -124,8 +189,7 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
-
-  // ─── SLOTS ────────────────────────────────────────────────────────────────
+  // ─── SLOTS & CONFIGURATION ────────────────────────────────────────────────
 
   /**
    * Назначает модуль в слот указанной станции.
@@ -161,6 +225,82 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
+  const updateStationConfiguration = async (stationId, rawConfiguration) => {
+    if (!rawConfiguration) return;
+
+    const mappedConfig = {
+      id: rawConfiguration.id || rawConfiguration.identifier || "",
+      manufacturer: rawConfiguration.manufacturer || "",
+      model: rawConfiguration.model || "",
+      version: rawConfiguration.version || "",
+      
+      shortDesignation: rawConfiguration.shortDesignation || "",
+      deviceDescription: rawConfiguration.deviceDescription || "",
+      articleNo: rawConfiguration.articleNo || "",
+      firmwareVersion: rawConfiguration.firmwareVersion || "",
+      hardwareVersion: rawConfiguration.hardwareVersion || "",
+      gsdFile: rawConfiguration.gsdFile || "",
+      profinetDeviceName: rawConfiguration.profinetDeviceName || "",
+      ipAddress: rawConfiguration.ipAddress || "",
+      subnetMask: rawConfiguration.subnetMask || "",
+      deviceNumber: parseInt(rawConfiguration.deviceNumber) || 0,
+      consistency: rawConfiguration.consistency || "",
+      
+      // ДОБАВЛЯЕМ МАППИНГ СИГНАЛОВ И КОМАНД
+      slots: (rawConfiguration.slots || []).map(slot => ({
+        number: parseInt(slot.number) || 0,
+        label: slot.label || "",
+        module: slot.module ? {
+          id: slot.module.id || "",
+          name: slot.module.name || "",
+          info: slot.module.info || "",
+          allowedInSlots: Array.isArray(slot.module.allowedInSlots) 
+                            ? slot.module.allowedInSlots.map(num => parseInt(num)) 
+                            : []
+        } : null,
+        // Собираем сигналы и команды из слота
+        signals: (slot.signals || []).map(sig => ({
+          id: String(sig.id),
+          name: sig.name || "",
+          node: sig.node || "Root",
+          regAddress: parseInt(sig.regAddress) || 0,
+          dataType: sig.dataType || "Bool",
+          csDataType: sig.csDataType || "BOOLEAN",
+          archive: sig.archive || "-",
+          checked: !!sig.checked
+        })),
+        commands: (slot.commands || []).map(cmd => ({
+          id: String(cmd.id),
+          name: cmd.name || "",
+          node: cmd.node || "Root",
+          regAddress: parseInt(cmd.regAddress) || 0,
+          dataType: cmd.dataType || "Bool",
+          csDataType: cmd.csDataType || "BOOLEAN",
+          retranslation: cmd.retranslation || "-",
+          checked: !!cmd.checked
+        }))
+      })),
+      
+      modules: (rawConfiguration.modules || []).map(mod => ({
+        id: mod.id || "",
+        name: mod.name || "",
+        info: mod.info || "",
+        allowedInSlots: Array.isArray(mod.allowedInSlots) ? mod.allowedInSlots.map(num => parseInt(num)) : []
+      }))
+    };
+
+    const response = await fetch(`/api/stations/${stationId}/configuration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mappedConfig)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update configuration: ${response.status} ${errorText}`);
+    }
+  }
+
   /** Очищает модуль из слота */
   const clearSlotModule = (stationId, slotNumber) => {
     assignModule(stationId, slotNumber, null)
@@ -172,7 +312,94 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
+  const updateChannelConfiguration = async (channelId, commands, signals) => {
+    // Формируем payload. Вы можете адаптировать это под ваш будущий DTO на бэкенде.
+    const payload = {
+      commands: commands || [],
+      signals: signals || []
+    };
 
+    const response = await fetch(`/api/channels/${channelId}/configuration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      console.error(`Ошибка при сохранении канала ${channelId}`);
+    }
+  };
+
+  // ИСПРАВЛЕНА ОШИБКА ЗДЕСЬ
+   const saveAllProjects = async () => {
+    loading.value = true;
+    try {
+      for (const project of projects.value) {
+        
+        // 1. СОХРАНЕНИЕ PROFINET СТАНЦИЙ
+        const stations = findAllStations(project);
+        for (const station of stations) {
+          if (station.configuration) {
+            try {
+              await updateStationConfiguration(station.id, station.configuration);
+            } catch (e) {
+              console.error(`Сетевая ошибка при сохранении станции ${station.name}`, e);
+            }
+          }
+        }
+
+        // 2. СОХРАНЕНИЕ IEC КАНАЛОВ
+        const channels = findAllChannels(project);
+        for (const channel of channels) {
+          try {
+            await updateChannelConfiguration(channel.id, channel.commands, channel.signals);
+          } catch (e) {
+            console.error(`Сетевая ошибка при сохранении канала ${channel.name}`, e);
+          }
+        }
+
+      }
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Вспомогательная функция для поиска всех каналов
+  const findAllChannels = (node) => {
+    let channels = [];
+    if (node.type === 'channel_iec') {
+      channels.push(node);
+    }
+    if (node.servers) {
+      for (const server of node.servers) channels = channels.concat(findAllChannels(server));
+    }
+    if (node.interfaces) {
+      for (const iface of node.interfaces) channels = channels.concat(findAllChannels(iface));
+    }
+    if (node.channels) {
+      for (const ch of node.channels) channels.push(ch); // Каналы лежат тут
+    }
+    return channels;
+  };
+
+  // --- НОВЫЙ КОД ДЛЯ РЕЖИМА ИСПОЛНЕНИЯ ---
+  const isRuntimeMode = ref(false)
+
+  const toggleRuntimeMode = async () => {
+    try {
+      if (!isRuntimeMode.value) {
+        // ЗАПУСК СЕРВЕРА
+        await fetch('http://localhost:5000/api/runtime/start', { method: 'POST' }); 
+        isRuntimeMode.value = true;
+      } else {
+        // ОСТАНОВКА СЕРВЕРА
+        await fetch('http://localhost:5000/api/runtime/stop', { method: 'POST' });
+        isRuntimeMode.value = false;
+      }
+    } catch (e) {
+      console.error("Ошибка сети", e);
+    }
+  }
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
   const findNodeById = (nodeId, nodes) => {
@@ -192,6 +419,35 @@ export const useDeviceStore = defineStore('device', () => {
     selectedNode.value = node
   }
 
+  // ИСПРАВЛЕНА ЛОГИКА ПОИСКА СТАНЦИЙ
+  const findAllStations = (node) => {
+    let stations = [];
+    
+    if (node.type === 'station') {
+      stations.push(node);
+    }
+    
+    // Обходим дерево в соответствии с вашей моделью DTO
+    if (node.servers) {
+      for (const server of node.servers) {
+        stations = stations.concat(findAllStations(server));
+      }
+    }
+    
+    if (node.interfaces) {
+      for (const iface of node.interfaces) {
+        stations = stations.concat(findAllStations(iface));
+      }
+    }
+    
+    if (node.stations) {
+      for (const station of node.stations) {
+        stations = stations.concat(findAllStations(station));
+      }
+    }
+    
+    return stations;
+  }
 
   // ─── EXPOSE ───────────────────────────────────────────────────────────────
 
@@ -208,16 +464,24 @@ export const useDeviceStore = defineStore('device', () => {
     addServer,
     addInterface,
     addStation,
+    addIecChannel,
+
     deleteNode,
     importGsdml,
+    updateStationConfiguration,
 
     assignModule,     
     clearSlotModule,  
+    saveAllProjects, // ЭКСПОРТИРУЕМ НОВУЮ ФУНКЦИЮ
 
     findNodeById,
     selectNode,
+    findAllStations,
 
     hoveredModule,
     setHoveredModule,
+
+    isRuntimeMode,
+    toggleRuntimeMode,
   }
 })

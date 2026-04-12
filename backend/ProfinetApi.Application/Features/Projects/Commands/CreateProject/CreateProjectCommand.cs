@@ -1,6 +1,6 @@
 ﻿using MediatR;
 using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.RepoInterfaces;
 using System.Text.Json.Serialization;
 
 namespace ProfinetApi.Application.Features.Projects.Commands.CreateProject;

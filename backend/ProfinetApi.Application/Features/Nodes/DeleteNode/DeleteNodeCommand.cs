@@ -1,5 +1,5 @@
 ﻿using MediatR;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Application.Features.Nodes.DeleteNode;
 

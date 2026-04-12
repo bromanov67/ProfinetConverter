@@ -1,7 +1,10 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
+using ProfinetApi.Application.DTOs;
 using ProfinetApi.Application.Features.Stations.Commands.CreateStation;
 using ProfinetApi.Application.Features.Stations.Commands.ImportGsdml;
+using ProfinetApi.Application.Features.Stations.Commands.UpdateStationConfiguration;
 
 namespace ProfinetApi.API.Controllers;
 
@@ -40,6 +43,21 @@ public class StationsController : ControllerBase
 
         var command = new ImportGsdmlCommand(id, stream, file.FileName);
 
+        try
+        {
+            await _mediator.Send(command);
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
+
+    [HttpPut("{id}/configuration")]
+    public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] StationConfigDto configuration)
+    {
+        var command = new UpdateStationConfigurationCommand(id, configuration);
         try
         {
             await _mediator.Send(command);

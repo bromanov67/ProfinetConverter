@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.Entities.Profinet;
+using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Application.Features.Stations.Commands.CreateStation;
 
@@ -8,44 +9,58 @@ public record CreateStationCommand(Guid InterfaceId, string Name) : IRequest<Gui
 
 public class CreateStationCommandHandler : IRequestHandler<CreateStationCommand, Guid>
 {
-    private readonly IProjectRepository _repository;
+	private readonly IProjectRepository _repository;
 
-    public CreateStationCommandHandler(IProjectRepository repository)
-    {
-        _repository = repository;
-    }
+	public CreateStationCommandHandler(IProjectRepository repository)
+	{
+		_repository = repository;
+	}
 
-    public async Task<Guid> Handle(CreateStationCommand request, CancellationToken ct)
-    {
-        var projects = await _repository.GetAllAsync(ct);
+	public async Task<Guid> Handle(CreateStationCommand request, CancellationToken ct)
+	{
+		var projects = await _repository.GetAllAsync(ct);
 
-        // Сложный поиск: Проект -> Сервер -> Интерфейс
-        // В реальной БД это было бы проще (SELECT ... FROM Interfaces WHERE Id = ...)
-        NetworkInterface? targetInterface = null;
-        Project? targetProject = null;
+		ProfinetInterface? targetInterface = null;
+		Project? targetProject = null;
 
-        foreach (var proj in projects)
-        {
-            foreach (var srv in proj.Servers)
-            {
-                var iface = srv.Interfaces.FirstOrDefault(i => i.Id == request.InterfaceId);
-                if (iface != null)
-                {
-                    targetInterface = iface;
-                    targetProject = proj;
-                    break;
-                }
-            }
-            if (targetProject != null) break;
-        }
+		// Ищем проект и нужный интерфейс
+		foreach (var proj in projects)
+		{
+			foreach (var srv in proj.Servers)
+			{
+				// Ищем интерфейс по Id
+				var iface = srv.Interfaces.FirstOrDefault(i => i.Id == request.InterfaceId);
 
-        if (targetProject == null || targetInterface == null)
-            throw new KeyNotFoundException("Parent interface not found");
+				// Если нашли, проверяем, что это именно Profinet интерфейс
+				if (iface is ProfinetInterface profinetIface)
+				{
+					targetInterface = profinetIface;
+					targetProject = proj;
+					break;
+				}
+			}
+			if (targetProject != null) break;
+		}
 
-        var station = new Station(request.Name, 0); // Address 0 по умолчанию
-        targetInterface.AddStation(station);
+		if (targetProject == null || targetInterface == null)
+		{
+			throw new KeyNotFoundException("Parent PROFINET interface not found or invalid interface type.");
+		}
 
-        await _repository.UpdateAsync(targetProject, ct);
-        return station.Id;
-    }
+		// Создаем станцию
+		var station = new Station("Station", 0)
+		{
+			Name = request.Name,
+			Active = true,
+			ConfigurationData = null
+		};
+
+		// Добавляем станцию в список интерфейса
+		targetInterface.Stations.Add(station);
+
+		// Сохраняем проект
+		await _repository.UpdateAsync(targetProject, ct);
+
+		return station.Id;
+	}
 }

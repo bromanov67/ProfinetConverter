@@ -1,5 +1,5 @@
 ﻿using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Infrastructure.Repositories;
 
@@ -37,8 +37,6 @@ public class InMemoryProjectRepository : IProjectRepository
 
     public Task UpdateAsync(Project project, CancellationToken ct = default)
     {
-        // В памяти мы работаем со ссылочными типами, поэтому объект 
-        // уже обновлен. Если бы была БД, тут был бы .Update()
         return Task.CompletedTask;
     }
 }

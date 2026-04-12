@@ -1,8 +1,8 @@
-﻿namespace ProfinetApi.Application.DTOs
+﻿public class GsdmlSlotDto
 {
-    public record GsdmlSlotDto(
-        int Number,
-        string Label,           
-        GsdmlModuleDto? Module
-    );
+    public int Number { get; set; }
+    public string Label { get; set; } = "";
+    public GsdmlModuleDto? Module { get; set; }
+    public List<SignalDto> Signals { get; set; } = new();
+    public List<CommandDto> Commands { get; set; } = new();
 }

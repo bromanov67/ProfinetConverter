@@ -24,14 +24,23 @@
             <button class="add-btn project-btn" @click="handleCreateProject">
               + Project
             </button>
-            <!-- Кнопка добавления сервера -->
+            
+            <!-- Кнопка сохранения проекта (вместо + Server) -->
             <button 
-              class="add-btn server-btn" 
-              @click="handleAddServer" 
+              class="add-btn save-btn" 
+              @click="handleSaveProject" 
               :disabled="projects.length === 0"
-              title="Выберите проект или будет использован первый"
+              title="Сохранить текущие изменения (модули, настройки и т.д.)"
             >
-              + Server
+              💾 Save
+            </button>
+
+            <button 
+              @click="store.toggleRuntimeMode()" 
+              :class="['action-btn', { 'runtime-active': store.isRuntimeMode }]"
+              style="margin-left: 20px;"
+            >
+              {{ store.isRuntimeMode ? '🛑 Остановить режим' : '▶ Режим исполнения' }}
             </button>
           </div>
         </div>
@@ -61,7 +70,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { storeToRefs } from 'pinia' // Важно для реактивности переменных
+import { storeToRefs } from 'pinia'
 import { useDeviceStore } from './stores/deviceStore'
 import Header from './components/Header.vue'
 import TreeNode from './components/TreeNode.vue'
@@ -69,7 +78,7 @@ import DetailsPanel from './components/DetailsPanel.vue'
 
 const store = useDeviceStore()
 
-// Деструктурируем реактивные переменные, чтобы использовать их в script
+// Деструктурируем реактивные переменные
 const { projects, selectedNode } = storeToRefs(store)
 
 onMounted(() => {
@@ -85,28 +94,22 @@ const handleCreateProject = async () => {
   }
 }
 
-// --- Логика добавления сервера ---
-const handleAddServer = async () => {
-  let targetProjectId = null
-
-  // 1. Если выбран проект -> добавляем в него
-  if (selectedNode.value && selectedNode.value.type === 'project') {
-    targetProjectId = selectedNode.value.id
-  } 
-  // 2. Иначе берем первый попавшийся проект (если есть)
-  else if (projects.value.length > 0) {
-    targetProjectId = projects.value[0].id
+// --- Логика сохранения проекта ---
+const handleSaveProject = async () => {
+  if (projects.value.length === 0) {
+    alert('Нет проектов для сохранения!');
+    return;
   }
 
-  if (!targetProjectId) {
-    alert('Сначала создайте проект!')
-    return
-  }
-
-  const name = prompt('Имя сервера:', 'PLC Server')
-  if (name) {
-    // Вызываем action стора
-    await store.addServer(targetProjectId, name)
+  // Если вы хотите сохранять весь стейт или конкретный выбранный проект:
+  try {
+    store.loading = true; // Можно включить лоадер на время сохранения
+    await store.saveAllProjects(); // Вызов метода из store (см. ниже)
+    alert('Изменения успешно сохранены!');
+  } catch (error) {
+    alert('Ошибка при сохранении: ' + error.message);
+  } finally {
+    store.loading = false;
   }
 }
 </script>
@@ -254,5 +257,31 @@ const handleAddServer = async () => {
 .tree-container::-webkit-scrollbar-thumb {
   background: #c0d0e0;
   border-radius: 3px;
+}
+
+.save-btn {
+  background: #e6f4ea;
+  color: #1e7e34;
+  border-color: #c3e6cb;
+}
+.save-btn:hover {
+  background: #d4edda;
+}
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f8f9fa;
+  color: #6c757d;
+  border-color: #dee2e6;
+}
+
+.tree-container { flex: 1; overflow-y: auto; padding: 8px 0; }
+.empty-state { padding: 20px; text-align: center; color: #888; font-size: 13px; }
+.tree-container::-webkit-scrollbar { width: 6px; }
+.tree-container::-webkit-scrollbar-thumb { background: #c0d0e0; border-radius: 3px; }
+
+.runtime-active {
+  background-color: #28a745 !important;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
 }
 </style>

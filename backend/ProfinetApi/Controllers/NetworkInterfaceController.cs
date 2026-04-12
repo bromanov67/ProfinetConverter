@@ -20,12 +20,13 @@ public class NetworkInterfacesController : ControllerBase
     {
         try
         {
-            var id = await _mediator.Send(command);
-            return Ok(new { id });
+            var createdInterfaceDto = await _mediator.Send(command);
+            return Ok(createdInterfaceDto); 
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(ex.Message);
         }
     }
+
 }

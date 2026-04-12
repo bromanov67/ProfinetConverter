@@ -10,6 +10,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
     "@types/node": "^25.2.0",
     "axios": "^1.13.4",
     "pinia": "^3.0.4",

@@ -1,8 +1,9 @@
 ﻿using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Interfaces;
-using System.Xml.Linq;
+using ProfinetApi.Domain.Entities.Profinet;
+using ProfinetApi.Domain.RepoInterfaces;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace ProfinetApi.Application.Services;
 
@@ -149,7 +150,6 @@ public class ConfigurationService : IConfigurationService
         }
     }
 
-    // Разбор строки слотов: "3 6", "1", "2..5" → List<int>
     private static List<int> ParseSlotNumbers(string raw)
     {
         var result = new List<int>();
@@ -167,7 +167,6 @@ public class ConfigurationService : IConfigurationService
         return result;
     }
 
-    // "val. effett. 4 Byte IN" → "val. effett."
     private static string StripByteCount(string name)
     {
         var m = Regex.Match(name, @"^(.+?)\s+(?:not used|\d+\s+Byte)");
@@ -177,13 +176,28 @@ public class ConfigurationService : IConfigurationService
     private async Task<(Project?, Station?)> FindProjectAndStationAsync(Guid stationId, CancellationToken ct)
     {
         var projects = await _repository.GetAllAsync(ct);
+
         foreach (var proj in projects)
+        {
             foreach (var server in proj.Servers)
-                foreach (var iface in server.Interfaces)
+            {
+                // Используем паттерн-матчинг (is) для безопасного приведения к ProfinetServer
+                if (server is ProfinetServer profinetServer)
                 {
-                    var station = iface.Stations.FirstOrDefault(s => s.Id == stationId);
-                    if (station != null) return (proj, station);
+                    // Фильтруем только ProfinetInterface, так как только у них есть Stations
+                    foreach (var iface in profinetServer.Interfaces.OfType<ProfinetInterface>())
+                    {
+                        var station = iface.Stations.FirstOrDefault(s => s.Id == stationId);
+                        if (station != null)
+                        {
+                            return (proj, station);
+                        }
+                    }
                 }
+            }
+        }
+
         return (null, null);
     }
+
 }

@@ -1,4 +1,6 @@
-﻿namespace ProfinetApi.Domain.Entities;
+﻿using ProfinetApi.Domain.Entities.Profinet;
+
+namespace ProfinetApi.Domain.Entities;
 
 public class Station : ProfinetNode
 {

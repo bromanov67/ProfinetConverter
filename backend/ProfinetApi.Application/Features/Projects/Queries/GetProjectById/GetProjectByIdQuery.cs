@@ -1,6 +1,6 @@
 ﻿using MediatR;
 using ProfinetApi.Application.DTOs;
-using ProfinetApi.Domain.Interfaces;
+using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Application.Features.Projects.Queries.GetProjectById;
 
@@ -21,6 +21,6 @@ public class GetProjectByIdQueryHandler : IRequestHandler<GetProjectByIdQuery, P
         if (project == null) return null;
 
         // Маппинг
-        return new ProjectDto(project.Id, project.Name, "project", project.CreatedAt, new());
+        return new ProjectDto(project.Id, project.Name, "project", project.CreatedAt, new List<object>());
     }
 }

@@ -4,8 +4,8 @@
         Guid Id,
         string Name,
         string Type,
-        bool Active, 
+        bool Active,
+        string Description,
         List<StationDto> Stations
     );
-
 }

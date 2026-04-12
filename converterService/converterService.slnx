@@ -1,7 +1,0 @@
-<Solution>
-  <Configurations>
-    <Platform Name="x64" />
-    <Platform Name="x86" />
-  </Configurations>
-  <Project Path="converterService.vcxproj" Id="f1fcf7e7-9057-4d4f-9347-7ff9632a929b" />
-</Solution>

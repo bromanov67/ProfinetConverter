@@ -3,10 +3,8 @@
     public record ProfinetServerDto(
         Guid Id,
         string Name,
-        string Type,
         bool Active,
-        int Address,
+        string Description,
         List<NetworkInterfaceDto> Interfaces
-    );
-
+    ) : ServerDtoBase(Id, Name, Active, Description);
 }
