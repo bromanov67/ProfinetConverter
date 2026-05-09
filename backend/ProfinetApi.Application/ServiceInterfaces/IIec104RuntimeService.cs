@@ -1,4 +1,4 @@
-﻿namespace ProfinetApi.Application.Services
+﻿namespace ProfinetApi.Application.ServiceInterfaces
 {
     public interface IIec104RuntimeService
     {
