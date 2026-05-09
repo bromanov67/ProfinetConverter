@@ -157,35 +157,54 @@ const childNodes = computed(() => {
     }
   }
 
-  // 3. Для Слота (с назначенным модулем) генерируем папки Сигналов/Команд
+    // 3. Для Слота (с назначенным модулем) генерируем папки Сигналов/Команд
   if (props.node.type === 'slot' && props.node.module) {
-    const modId = (props.node.module.id || '').toUpperCase()
-    const children = []
+    const mod = props.node.module;
+    const children = [];
     
-    // ИСПРАВЛЕНИЕ 1: Добавляем stationId и slotNumber, чтобы DetailsPanel мог найти реальный слот в сторе
-    if (modId.includes('IN') || modId.includes('INPUT')) {
+    // Считаем данные так же, как в SlotDetails
+    let dataIn = mod.inputLength || 0;
+    let dataOut = mod.outputLength || 0;
+
+    if (mod.submodules && mod.submodules.length > 0) {
+      dataIn = mod.submodules.reduce((sum, sm) => sum + (sm.inputLength || 0), 0);
+      dataOut = mod.submodules.reduce((sum, sm) => sum + (sm.outputLength || 0), 0);
+    } 
+    // Fallback: если длины 0, но это реальный модуль, просто покажем обе папки на всякий случай
+    else if (dataIn === 0 && dataOut === 0) {
+      const id = (mod.id || '').toUpperCase();
+      if (id.includes('IN')) dataIn = 1;
+      if (id.includes('OUT')) dataOut = 1;
+      if (!id.includes('IN') && !id.includes('OUT')) {
+        dataIn = 1; dataOut = 1; // Показываем обе, чтобы пользователь сам решил
+      }
+    }
+
+    // Добавляем папку "Сигналы", если модуль имеет входы
+    if (dataIn > 0) {
       children.push({
         id: `${props.node.id}__signals`,
         type: 'signals_folder',
         name: 'Сигналы',
-        stationId: props.node.parentStationId, // Пробрасываем ID станции
-        slotNumber: props.node.slotNumber,     // Пробрасываем номер слота
-        module: props.node.module
-      })
+        stationId: props.node.parentStationId,
+        slotNumber: props.node.slotNumber,
+        module: mod
+      });
     }
 
-    if (modId.includes('OUT') || modId.includes('OUTPUT')) {
+    // Добавляем папку "Команды", если модуль имеет выходы
+    if (dataOut > 0) {
       children.push({
         id: `${props.node.id}__commands`,
         type: 'commands_folder',
         name: 'Команды',
-        stationId: props.node.parentStationId, // Пробрасываем ID станции
-        slotNumber: props.node.slotNumber,     // Пробрасываем номер слота
-        module: props.node.module
-      })
+        stationId: props.node.parentStationId,
+        slotNumber: props.node.slotNumber,
+        module: mod
+      });
     }
     
-    return children
+    return children;
   }
 
   // 5. Каналы (IEC 104) генерируют свои папки сигналов/команд

@@ -19,135 +19,180 @@ public class ConfigurationService : IConfigurationService
     public async Task ImportGsdmlAsync(Guid stationId, Stream fileStream, string fileName, CancellationToken ct)
     {
         var (project, station) = await FindProjectAndStationAsync(stationId, ct);
-        if (project == null || station == null)
-            throw new KeyNotFoundException($"Station {stationId} not found");
+        if (project == null || station == null) throw new KeyNotFoundException($"Station {stationId} not found");
 
         try
         {
             var doc = await XDocument.LoadAsync(fileStream, LoadOptions.None, ct);
             XNamespace ns = doc.Root?.GetDefaultNamespace() ?? "http://www.profibus.com/GSDML/2003/11/DeviceProfile";
 
-            // --- 1. Словарь текстов ---
             var textDict = new Dictionary<string, string>();
             foreach (var t in doc.Descendants(ns + "Text"))
             {
                 var id = t.Attribute("TextId")?.Value;
                 var val = t.Attribute("Value")?.Value;
-                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(val))
-                    textDict[id] = val;
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(val)) textDict[id] = val;
             }
-            string Resolve(string? tid) =>
-                string.IsNullOrEmpty(tid) ? "" : textDict.TryGetValue(tid, out var v) ? v : tid;
+            string Resolve(string? tid) => string.IsNullOrEmpty(tid) ? "" : textDict.TryGetValue(tid, out var v) ? v : tid;
 
-            // --- 2. DeviceIdentity ---
-            var identity = doc.Descendants(ns + "DeviceIdentity").FirstOrDefault();
-            station.ConfigIdentifier = identity?.Attribute("DeviceID")?.Value ?? "";
-            station.ConfigManufacturer = identity?.Element(ns + "VendorName")?.Attribute("Value")?.Value ?? "";
-
-            // --- 3. DAP (DeviceAccessPoint) ---
             var dap = doc.Descendants(ns + "DeviceAccessPointItem").FirstOrDefault();
-            var family = doc.Descendants(ns + "Family").FirstOrDefault();
-
             var mi = dap?.Element(ns + "ModuleInfo");
-            station.ConfigModel = family?.Attribute("ProductFamily")?.Value
-                                 ?? Resolve(mi?.Element(ns + "Name")?.Attribute("TextId")?.Value);
-            station.ConfigVersion = mi?.Element(ns + "HardwareRelease")?.Attribute("Value")?.Value
-                                 ?? mi?.Element(ns + "SoftwareRelease")?.Attribute("Value")?.Value
-                                 ?? "1.0";
 
-            // --- 4. AllowedInSlots: строим словарь moduleId → [slotNums] ---
-            // AllowedInSlots может быть "3 6" (пробел), "1" или "2..5" — обрабатываем всё
+            int GetIoLength(XElement element, string direction)
+            {
+                int totalLength = 0;
+
+                var dataItems = element.Descendants(ns + "IOData")
+                                       .Elements(ns + direction)
+                                       .Elements(ns + "DataItem");
+
+                foreach (var item in dataItems)
+                {
+                    // 1. Попытка взять явный Length (для OctetString, массивов и т.д.)
+                    if (int.TryParse(item.Attribute("Length")?.Value, out var len))
+                    {
+                        totalLength += len;
+                        continue;
+                    }
+
+                    // 2. Вычисляем длину динамически из названия типа (например, "Unsigned32" -> 32 бита -> 4 байта)
+                    var dataType = item.Attribute("DataType")?.Value;
+                    if (!string.IsNullOrEmpty(dataType))
+                    {
+                        var match = Regex.Match(dataType, @"\d+$"); // Ищем число в конце строки
+                        if (match.Success && int.TryParse(match.Value, out var bits))
+                        {
+                            totalLength += Math.Max(1, bits / 8); // Делим биты на 8, чтобы получить байты
+                        }
+                        else if (dataType.Equals("Bit", StringComparison.OrdinalIgnoreCase))
+                        {
+                            totalLength += 1; // Одиночные биты без явной длины округляем до байта для маппинга
+                        }
+                    }
+                }
+
+                return totalLength;
+            }
+
             var allowedMap = new Dictionary<string, List<int>>();
-            foreach (var modRef in doc.Descendants(ns + "UseableModules")
-                                       .FirstOrDefault()
-                                       ?.Elements(ns + "ModuleItemRef") ?? Enumerable.Empty<XElement>())
+            var useableModules = doc.Descendants(ns + "UseableModules").FirstOrDefault();
+            foreach (var modRef in useableModules?.Elements(ns + "ModuleItemRef") ?? Enumerable.Empty<XElement>())
             {
                 var target = modRef.Attribute("ModuleItemTarget")?.Value;
-                var slotsRaw = modRef.Attribute("AllowedInSlots")?.Value ?? "";
-                var slotNums = ParseSlotNumbers(slotsRaw);
-                if (target != null)
-                    allowedMap[target] = slotNums;
+                if (target != null) allowedMap[target] = ParseSlotNumbers(modRef.Attribute("AllowedInSlots")?.Value ?? "");
             }
 
-            // --- 5. Каталог модулей с AllowedInSlots ---
-            var modulesList = new List<object>();
+            var catalogModules = new List<object>();
             foreach (var mod in doc.Descendants(ns + "ModuleItem"))
             {
                 var modId = mod.Attribute("ID")?.Value ?? "";
-                var nameTextId = mod.Element(ns + "ModuleInfo")?.Element(ns + "Name")?.Attribute("TextId")?.Value;
-                var infoTextId = mod.Element(ns + "ModuleInfo")?.Element(ns + "InfoText")?.Attribute("TextId")?.Value;
-                var allowed = allowedMap.TryGetValue(modId, out var sl) ? sl : new List<int>();
+                var nId = mod.Element(ns + "ModuleInfo")?.Element(ns + "Name")?.Attribute("TextId")?.Value;
 
-                modulesList.Add(new
+                catalogModules.Add(new
                 {
                     id = modId,
-                    name = Resolve(nameTextId) ?? modId,
-                    info = Resolve(infoTextId),
-                    allowedInSlots = allowed
+                    name = Resolve(nId) ?? modId,
+                    allowedInSlots = allowedMap.TryGetValue(modId, out var sl) ? sl : new List<int>(),
+                    inputLength = GetIoLength(mod, "Input"),
+                    outputLength = GetIoLength(mod, "Output")
                 });
-            }
-
-            // --- 6. Слоты с метками (label = категория из первого подходящего модуля) ---
-            var slotLabels = new Dictionary<int, string>();
-            foreach (var kv in allowedMap)
-            {
-                var mod = doc.Descendants(ns + "ModuleItem")
-                             .FirstOrDefault(m => m.Attribute("ID")?.Value == kv.Key);
-                if (mod == null) continue;
-                var nameId = mod.Element(ns + "ModuleInfo")?.Element(ns + "Name")?.Attribute("TextId")?.Value;
-                var name = Resolve(nameId) ?? kv.Key;
-                var label = StripByteCount(name); // "val. effett. 4 Byte IN" → "val. effett."
-                foreach (var slotNum in kv.Value)
-                    slotLabels.TryAdd(slotNum, label);
             }
 
             var slotsList = new List<object>();
-            var physicalSlots = dap?.Attribute("PhysicalSlots")?.Value ?? "0..0";
-            var parts = physicalSlots.Split("..");
-            int maxSlot = parts.Length == 2 && int.TryParse(parts[1], out var mx) ? mx : 0;
-            for (int i = 1; i <= maxSlot; i++)
+
+            // ОПРЕДЕЛЯЕМ ТИП ПЛК:
+            // Если в каталоге нет доступных для вставки модулей, это Компактный ПЛК (Siemens SIPROTEC)
+            bool isCompactPlc = !catalogModules.Any();
+
+            if (isCompactPlc)
             {
+                // КОМПАКТНЫЙ ПЛК (Siemens) - Создаем слоты под каждый сигнал
+                var virtualSubmodules = doc.Descendants(ns + "VirtualSubmoduleItem").ToList();
+
+                // Слот 1: Главная голова DAP
+                var headName = Resolve(mi?.Element(ns + "Name")?.Attribute("TextId")?.Value) ?? "Built-in Base I/O";
                 slotsList.Add(new
                 {
-                    number = i,
-                    label = slotLabels.TryGetValue(i, out var lbl) ? lbl : $"Slot {i}",
-                    module = (object?)null
+                    number = 1,
+                    label = headName,
+                    module = new
+                    {
+                        id = "builtin_io",
+                        name = headName,
+                        isBuiltIn = true,
+                        inputLength = 0,
+                        outputLength = 0
+                    }
                 });
+
+                // Слоты 2+: Отдельные слоты для каждого виртуального канала
+                int slotCounter = 2;
+                foreach (var vsm in virtualSubmodules)
+                {
+                    var vsmId = vsm.Attribute("ID")?.Value ?? "";
+                    var mInfo = vsm.Element(ns + "ModuleInfo");
+                    var name = Resolve(mInfo?.Element(ns + "Name")?.Attribute("TextId")?.Value) ?? vsmId;
+                    var fixedSubslot = vsm.Attribute("FixedInSubslots")?.Value ?? "";
+
+                    slotsList.Add(new
+                    {
+                        number = slotCounter,
+                        label = $"Channel {fixedSubslot}", // Будет отображаться как Channel 1000
+                        module = new
+                        {
+                            id = vsmId,
+                            name = name,
+                            isBuiltIn = true, // Запрет на удаление
+                            inputLength = GetIoLength(vsm, "Input"),
+                            outputLength = GetIoLength(vsm, "Output")
+                        }
+                    });
+                    slotCounter++;
+                }
+            }
+            else
+            {
+                // КЛАССИЧЕСКИЙ ПЛК (Модульный) - Создаем пустые слоты
+                var physicalSlotsRaw = dap?.Attribute("PhysicalSlots")?.Value ?? "0..0";
+                var parts = physicalSlotsRaw.Split("..");
+
+                // Определяем максимальный слот. Если "0..64", то maxSlot = 64.
+                int maxSlot = parts.Length == 2 && int.TryParse(parts[1], out var mx) ? mx :
+                             (int.TryParse(physicalSlotsRaw, out var single) ? single : 0);
+
+                // В PROFINET нулевой слот зарезервирован под саму голову (DAP). Модули I/O идут с 1.
+                for (int i = 1; i <= maxSlot; i++)
+                {
+                    slotsList.Add(new
+                    {
+                        number = i,
+                        label = $"Slot {i}", // Никаких попыток угадать имя. Просто "Slot X".
+                        module = (object?)null
+                    });
+                }
             }
 
-            // --- 7. Дополнительные поля из DAP ---
-            var shortDesig = Resolve(mi?.Element(ns + "Name")?.Attribute("TextId")?.Value);
-            var deviceDescr = Resolve(mi?.Element(ns + "InfoText")?.Attribute("TextId")?.Value);
-            var articleNo = mi?.Element(ns + "OrderNumber")?.Attribute("Value")?.Value ?? "";
-            var firmwareVer = mi?.Element(ns + "SoftwareRelease")?.Attribute("Value")?.Value ?? "";
-            var hardwareVer = mi?.Element(ns + "HardwareRelease")?.Attribute("Value")?.Value ?? "";
-            var profinetName = dap?.Attribute("DNS_CompatibleName")?.Value ?? "";
-
-            // --- 8. Сериализация в JSON ---
             station.ConfigurationData = JsonSerializer.Serialize(new
             {
-                shortDesignation = shortDesig,
-                deviceDescription = deviceDescr,
-                articleNo,
-                firmwareVersion = firmwareVer,
-                hardwareVersion = hardwareVer,
+                shortDesignation = Resolve(mi?.Element(ns + "Name")?.Attribute("TextId")?.Value),
+                deviceDescription = Resolve(mi?.Element(ns + "InfoText")?.Attribute("TextId")?.Value),
+                articleNo = mi?.Element(ns + "OrderNumber")?.Attribute("Value")?.Value ?? "",
+                firmwareVersion = mi?.Element(ns + "SoftwareRelease")?.Attribute("Value")?.Value ?? "",
+                hardwareVersion = mi?.Element(ns + "HardwareRelease")?.Attribute("Value")?.Value ?? "",
                 gsdFile = fileName,
-                profinetDeviceName = profinetName,
+                profinetDeviceName = dap?.Attribute("DNS_CompatibleName")?.Value ?? "",
                 ipAddress = "",
                 subnetMask = "255.255.255.0",
                 deviceNumber = 1,
                 consistency = "",
                 slots = slotsList,
-                modules = modulesList
+                modules = catalogModules
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-            station.Description = $"GSDML imported: {DateTime.Now:yyyy-MM-dd HH:mm} | {modulesList.Count} modules";
+            station.Description = $"GSDML imported: {DateTime.Now:yyyy-MM-dd HH:mm}";
             await _repository.UpdateAsync(project, ct);
         }
-        catch (Exception ex)
-        {
-            throw new Exception($"GSDML processing error: {ex.Message}", ex);
-        }
+        catch (Exception ex) { throw new Exception($"GSDML processing error: {ex.Message}", ex); }
     }
 
     private static List<int> ParseSlotNumbers(string raw)

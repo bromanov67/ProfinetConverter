@@ -26,14 +26,9 @@
       <!-- ========================================================= -->
       <div class="tab-content" v-show="!store.isRuntimeMode || activeTab === 'config'">
         
-        <!-- Проект -->
-        <div v-if="store.selectedNode.type === 'project'" class="details-actions">
-          <button class="action-btn" @click="addServer">+ Add Server</button>
-        </div>
-
         <!-- 1. Серверы -->
         <ServerDetails 
-          v-else-if="['server', 'server_profinet'].includes(store.selectedNode.type)" 
+          v-if="['server', 'server_profinet'].includes(store.selectedNode.type)" 
           :node="store.selectedNode" 
         />
         <IecServerDetails 
@@ -189,6 +184,7 @@ watch(() => store.selectedNode, (newNode) => {
 });
 
 // --- ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ТАБЛИЦЫ RUNTIME ---
+// --- ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ТАБЛИЦЫ RUNTIME ---
 const runtimeData = ref([]);
 
 // Создаем подключение к хабу
@@ -199,8 +195,10 @@ const connection = new signalR.HubConnectionBuilder()
 
 // Слушаем событие прихода данных от C#
 connection.on('ReceiveRuntimeData', (data) => {
-  // Обновляем данные только если мы на вкладке Runtime
-  if (!store.isRuntimeMode || !store.selectedNode || activeTab.value !== 'runtime') return;
+  // 1. ПРОВЕРЯЕМ БЛОКИРОВКУ
+  if (!store.isRuntimeMode || !store.selectedNode || activeTab.value !== 'runtime') {
+      return;
+  }
 
   const now = new Date();
   const timeStr = now.getFullYear() + '-' + 
@@ -213,19 +211,31 @@ connection.on('ReceiveRuntimeData', (data) => {
   const baseId = `IEC104.${store.selectedNode.name}.`;
 
   // Преобразуем полученные JSON-данные в формат таблицы
-  // (C# свойства с большой буквы автоматически конвертируются в camelCase: Identifier -> identifier)
-  runtimeData.value = data.map((item, index) => ({
-    id: index,
-    identifier: baseId + item.identifier,
-    region: 'NONE',
-    address: 'VT_EMPTY',
-    value: item.value,
-    quality: item.quality,
-    time: timeStr,
-    type: item.type,
-    access: 'ReadOnly',
-    comment: 'Real-time WebSocket data'
-  }));
+  runtimeData.value = data.map((item) => {
+    // Безопасный парсинг значения (превращаем в строку, чтобы избежать NaN)
+    let displayValue = "0";
+    if (item.value !== null && item.value !== undefined) {
+       displayValue = String(item.value);
+    }
+    
+    // Если это float, можно обрезать лишние нули (опционально)
+    if (item.type === 'float' && !isNaN(parseFloat(displayValue))) {
+        displayValue = parseFloat(displayValue).toString();
+    }
+
+    return {
+      id: item.ioa,
+      identifier: baseId + item.identifier,
+      region: 'NONE',
+      address: item.ioa, 
+      value: displayValue, // <-- Теперь тут всегда корректная строка
+      quality: item.quality || 'GOOD',
+      time: timeStr,
+      type: item.type,
+      access: 'ReadOnly',
+      comment: 'Real-time Profinet data'
+    };
+  });
 });
 
 // Запускаем/останавливаем WebSocket соединение в зависимости от режима исполнения

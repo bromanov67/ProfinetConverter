@@ -10,7 +10,6 @@ public abstract class ServerBase
 
     public abstract ServerType Type { get; }
 
-    // ВОТ ЭТА СТРОКА БЫЛА УТЕРЯНА. Она обязательна!
     public List<InterfaceBase> Interfaces { get; set; } = new();
 
     public void AddInterface(InterfaceBase netInterface) => Interfaces.Add(netInterface);

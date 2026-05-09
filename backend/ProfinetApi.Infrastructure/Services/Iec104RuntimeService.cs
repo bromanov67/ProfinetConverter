@@ -8,14 +8,6 @@ using System.Collections.Concurrent;
 
 namespace ProfinetApi.Infrastructure.Services
 {
-    public class SignalData
-    {
-        public int IOA { get; set; }
-        public string Identifier { get; set; }
-        public string Value { get; set; }
-        public string Quality { get; set; }
-        public string Type { get; set; }
-    }
 
     public class Iec104RuntimeService : IIec104RuntimeService, IHostedService
     {
@@ -28,23 +20,36 @@ namespace ProfinetApi.Infrastructure.Services
         public Iec104RuntimeService(IHubContext<RuntimeHub> hubContext)
         {
             _hubContext = hubContext;
-            InitPlcMemory();
-        }
-
-        private void InitPlcMemory()
-        {
-            // Две булевские переменные
-            _plcMemory.TryAdd(101, new SignalData { IOA = 101, Identifier = "Signal_101", Value = "1", Quality = "GOOD", Type = "bool" });
-            _plcMemory.TryAdd(102, new SignalData { IOA = 102, Identifier = "Signal_102", Value = "1", Quality = "GOOD", Type = "bool" });
-
-            _plcMemory.TryAdd(103, new SignalData { IOA = 103, Identifier = "Signal_103_Float", Value = "15.5", Quality = "GOOD", Type = "float" });
         }
 
         public bool IsRunning => _server != null && _server.IsRunning();
 
-        public void StartServer(string ip, int port)
+        public void StartServer(string ip, int port, IEnumerable<SignalData> config)
         {
             if (IsRunning) return;
+
+            _plcMemory.Clear();
+            Console.WriteLine($"[IEC104] StartServer вызван. Конфигов получено: {config?.Count() ?? 0}");
+
+            if (config != null)
+            {
+                foreach (var item in config)
+                {
+                    bool added = _plcMemory.TryAdd(item.IOA, new SignalData
+                    {
+                        IOA = item.IOA,
+                        Identifier = item.Identifier,
+                        Value = item.Type == "float" ? "0.0" : "0",
+                        Quality = "GOOD",
+                        Type = item.Type,
+                        ByteOffset = item.ByteOffset, // ПРОВЕРЬТЕ ЧТО ВЫ ДОБАВИЛИ ЭТИ СТРОКИ
+                        BitOffset = item.BitOffset
+                    });
+                    Console.WriteLine($"[IEC104] Добавлен тег IOA={item.IOA}, Type={item.Type}, ByteOffset={item.ByteOffset}. Успех: {added}");
+                }
+            }
+
+            Console.WriteLine($"[IEC104] _plcMemory.Count после инициализации = {_plcMemory.Count}");
 
             _server = new Server();
 
@@ -74,7 +79,6 @@ namespace ProfinetApi.Infrastructure.Services
                     var floatSignals = _plcMemory.Values.Where(s => s.Type == "float").ToList();
                     if (floatSignals.Any())
                     {
-                        // Для float используется другой тип - MeasuredValueShort (M_ME_NC_1)
                         var floatAsdu = new ASDU(appParams, CauseOfTransmission.INTERROGATED_BY_STATION, false, false, 0, asdu.Ca, false);
                         foreach (var sig in floatSignals)
                         {
@@ -95,7 +99,6 @@ namespace ProfinetApi.Infrastructure.Services
             // 2. ОБРАБОТЧИК ЗАПИСИ (Команды от MasterOPC)
             _server.SetASDUHandler((parameter, connection, asdu) =>
             {
-                // Запись bool (одиночная команда)
                 if (asdu.TypeId == TypeID.C_SC_NA_1)
                 {
                     var cmd = (SingleCommand)asdu.GetElement(0);
@@ -106,13 +109,11 @@ namespace ProfinetApi.Infrastructure.Services
                         return true;
                     }
                 }
-                // НОВОЕ: Запись float (команда установки значения / Set point command)
                 else if (asdu.TypeId == TypeID.C_SE_NC_1)
                 {
                     var cmd = (SetpointCommandShort)asdu.GetElement(0);
                     if (_plcMemory.TryGetValue(cmd.ObjectAddress, out var sig) && sig.Type == "float")
                     {
-                        // Сохраняем с точкой для универсальности
                         sig.Value = cmd.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                         connection.SendACT_CON(asdu, false);
                         return true;
@@ -131,6 +132,49 @@ namespace ProfinetApi.Infrastructure.Services
                 await _hubContext.Clients.All.SendAsync("ReceiveRuntimeData", _plcMemory.Values);
             };
             _broadcastTimer.Start();
+        }
+
+        public void UpdateMemoryFromProfinet(byte[] payloadBytes)
+        {
+            // Проходим по всей нашей сконфигурированной памяти
+            foreach (var sig in _plcMemory.Values)
+            {
+                // Проверка: чтобы мы не вышли за пределы массива
+                if (sig.ByteOffset >= payloadBytes.Length)
+                    continue;
+
+                if (sig.Type == "bool")
+                {
+                    // Берем конкретный байт
+                    byte b = payloadBytes[sig.ByteOffset];
+                    // Проверяем конкретный бит (0-7)
+                    bool bitValue = (b & (1 << sig.BitOffset)) != 0;
+
+                    sig.Value = bitValue ? "1" : "0";
+                }   
+                else if (sig.Type == "int" || sig.Type == "short")
+                {
+                    // Читаем 2 байта (16 бит)
+                    if (sig.ByteOffset + 1 < payloadBytes.Length)
+                    {
+                        // Зависит от Endianness ПЛК. Для Siemens/Profinet обычно Big Endian
+                        // Но CODESYS может быть Little Endian. Если значения кривые, поменяйте местами:
+                        // short val = (short)((payloadBytes[sig.ByteOffset] << 8) | payloadBytes[sig.ByteOffset + 1]);
+
+                        short val = BitConverter.ToInt16(payloadBytes, sig.ByteOffset);
+                        sig.Value = val.ToString();
+                    }
+                }
+                else if (sig.Type == "float")
+                {
+                    // Читаем 4 байта (32 бита)
+                    if (sig.ByteOffset + 3 < payloadBytes.Length)
+                    {
+                        float val = BitConverter.ToSingle(payloadBytes, sig.ByteOffset);
+                        sig.Value = val.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                }
+            }
         }
 
         public void StopServer()

@@ -1,0 +1,26 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Копируем csproj и восстанавливаем зависимости
+COPY ["ProfinetApi/ProfinetApi.csproj", "ProfinetApi/"]
+COPY ["ProfinetApi.Application/ProfinetApi.Application.csproj", "ProfinetApi.Application/"]
+COPY ["ProfinetApi.Domain/ProfinetApi.Domain.csproj", "ProfinetApi.Domain/"]
+COPY ["Protos/", "Protos/"]
+
+RUN dotnet restore "ProfinetApi/ProfinetApi.csproj"
+
+# Копируем всё остальное и собираем
+COPY . .
+WORKDIR "/src/ProfinetApi"
+RUN dotnet build "ProfinetApi.csproj" -c Release -o /app/build
+RUN dotnet publish "ProfinetApi.csproj" -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+
+# Запускаем Kestrel на 5000 порту
+ENV ASPNETCORE_URLS=http://+:5000
+EXPOSE 5000
+
+ENTRYPOINT ["dotnet", "ProfinetApi.dll"]

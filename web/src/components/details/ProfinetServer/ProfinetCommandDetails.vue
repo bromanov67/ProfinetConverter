@@ -15,16 +15,9 @@
             <th>Адрес регистра</th>
             <th>Тип данных</th>
             <th>Тип данных КС</th>
-            <th>Ретрансляция</th>
-          </tr>
-          <tr class="filter-row">
-            <td>...</td>
-            <td><input type="text" placeholder="Фильтр" /></td>
-            <td><input type="text" placeholder="Фильтр" /></td>
-            <td><input type="text" placeholder="Фильтр" /></td>
-            <td><input type="text" placeholder="Фильтр" /></td>
-            <td><input type="text" placeholder="Фильтр" /></td>
-            <td><input type="text" placeholder="Фильтр" /></td>
+            <th>Byte Offset</th>
+            <th>Bit Offset</th> 
+            <th>Ретрансляция (из МЭК 104)</th>
           </tr>
         </thead>
         <tbody>
@@ -45,13 +38,47 @@
               </select>
             </td>
             <td>{{ item.csDataType }}</td>
-            <td><input type="text" v-model="item.retranslation" class="editable-input" /></td>
+            
+            <!-- Новое поле: Byte Offset -->
+            <td>
+              <input 
+                type="number" 
+                v-model="item.byteOffset" 
+                class="editable-input" 
+                min="0" 
+                max="63"
+              />
+            </td>
+            
+            <!-- Новое поле: Bit Offset (активно только для Bool) -->
+            <td>
+              <input 
+                type="number" 
+                v-model="item.bitOffset" 
+                class="editable-input" 
+                min="0" 
+                max="7"
+                :disabled="item.dataType !== 'Bool'"
+                :style="{ opacity: item.dataType === 'Bool' ? '1' : '0.4' }"
+              />
+            </td>
+
+            <td>
+              <!-- Выпадающий список всех доступных МЭК команд -->
+              <select v-model="item.retranslation" class="select-field">
+                <option value="-">Не выбрано</option>
+                <option v-for="iec in availableIecCommands" :key="iec.id" :value="iec.id">
+                  {{ iec.label }}
+                </option>
+              </select>
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
 </template>
+
 <script setup>
 import { computed } from 'vue';
 import { useDeviceStore } from '../../../stores/deviceStore';
@@ -71,6 +98,29 @@ const dataTypeMapping = {
 };
 
 const dataTypes = Object.keys(dataTypeMapping);
+
+// Собираем все КОМАНДЫ МЭК 104 из проекта для выпадающего списка
+const availableIecCommands = computed(() => {
+  const iecList = [];
+  for (const proj of store.projects) {
+    for (const srv of proj.servers || []) {
+      if (srv.type !== 'server_iec104') continue;
+      for (const iface of srv.interfaces || []) {
+        for (const channel of iface.channels || []) {
+          if (channel.commands) {
+            channel.commands.forEach(cmd => {
+              iecList.push({
+                id: cmd.id,
+                label: `[МЭК: ${channel.name}] ${cmd.name} (IOA: ${cmd.regAddress})`
+              });
+            });
+          }
+        }
+      }
+    }
+  }
+  return iecList;
+});
 
 // ИЩЕМ РЕАЛЬНЫЙ СЛОТ В КОНФИГУРАЦИИ
 const getRealSlot = () => {
@@ -104,6 +154,10 @@ const activeCommands = computed(() => {
 
 const updateCsType = (item) => {
   item.csDataType = dataTypeMapping[item.dataType];
+  // Сбрасываем bitOffset, если тип изменили с Bool на другой
+  if (item.dataType !== 'Bool') {
+    item.bitOffset = 0;
+  }
 };
 
 const addCommand = () => {
@@ -116,7 +170,6 @@ const addCommand = () => {
 
   const nextIndex = slot.commands.length + 1;
   
-  // ДОБАВЛЯЕМ ПРЯМО В СЛОТ, А НЕ В PROPS.NODE
   slot.commands.push({
     id: Date.now().toString() + Math.random().toString().slice(2, 6),
     checked: true,
@@ -125,7 +178,9 @@ const addCommand = () => {
     regAddress: 0,
     dataType: 'Bool',
     csDataType: 'BOOLEAN',
-    retranslation: 'Сигнал не выб...'
+    byteOffset: 0, // Инициализация смещения
+    bitOffset: 0,  // Инициализация смещения бита
+    retranslation: '-'
   });
 };
 
@@ -163,6 +218,7 @@ const addCommandGroup = () => {
 
 .editable-input { width: 100%; background: transparent; color: #eee; border: 1px solid transparent; font-size: 13px; outline: none; padding: 2px;}
 .editable-input:focus { border-bottom: 1px solid #999; }
+.editable-input:disabled { cursor: not-allowed; } /* Стиль для отключенного инпута */
 
 .select-field { width: 100%; background: #5a5a5a; color: #eee; border: 1px solid #777; padding: 2px 4px; outline: none; }
 .select-field:focus { border-color: #999; }

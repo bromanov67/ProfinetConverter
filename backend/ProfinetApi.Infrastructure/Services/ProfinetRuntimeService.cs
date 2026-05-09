@@ -1,119 +1,74 @@
-﻿using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.SignalR;
-using ProfinetApi.GrpcClients;
-using ProfinetApi.Infrastructure.Hubs;
-using System.Collections.Concurrent;
+﻿using Grpc.Net.Client;
+using ProfinetApi.Application.Interfaces;
+using System.Net.Security;
 
 namespace ProfinetApi.Infrastructure.Services
 {
     public class ProfinetRuntimeService : IProfinetRuntimeService
     {
-        private readonly IHubContext<RuntimeHub> _hubContext;
-
-        // ИСПРАВЛЕНИЕ 2: Используем новое имя сервиса из proto-файла
-        private ProfinetStackService.ProfinetStackServiceClient _grpcClient;
-        private GrpcChannel _grpcChannel;
-        private AsyncDuplexStreamingCall<IoWriteRequest, IoUpdateResponse> _ioStream;
-        private CancellationTokenSource _cts;
-
-        public bool IsRunning { get; private set; }
-
-        private ConcurrentDictionary<int, byte[]> _profinetMemory = new();
-
-        public ProfinetRuntimeService(IHubContext<RuntimeHub> hubContext)
-        {
-            _hubContext = hubContext;
-        }
-
-        public async Task StartServerAsync(string interfaceName, string stationName)
-        {
-            if (IsRunning) return;
-
-            _grpcChannel = GrpcChannel.ForAddress("http://localhost:5001");
-            // ИСПРАВЛЕНИЕ 3: Создаем клиента с новым именем
-            _grpcClient = new ProfinetStackService.ProfinetStackServiceClient(_grpcChannel);
-
-            var startResponse = await _grpcClient.StartStackAsync(new StartRequest
-            {
-                InterfaceName = interfaceName,
-                StationName = stationName
-            });
-
-            if (!startResponse.Success)
-            {
-                throw new Exception($"Profinet start failed: {startResponse.ErrorMessage}");
-            }
-
-            IsRunning = true;
-            _cts = new CancellationTokenSource();
-
-            // Открываем двунаправленный стрим
-            _ioStream = _grpcClient.StreamIoData(cancellationToken: _cts.Token);
-
-            _ = Task.Run(async () => await ReceiveProfinetDataLoopAsync(), _cts.Token);
-        }
-
-        private async Task ReceiveProfinetDataLoopAsync()
+        public async Task StartServerAsync(string interfaceName, string stationName, int moduleIdent, int submoduleIdent, int inputLen, int outputLen)
         {
             try
             {
-                await foreach (var response in _ioStream.ResponseStream.ReadAllAsync(_cts.Token))
+                string pythonVmUrl = "http://192.168.56.102:5005"; // Порт Python-сервера (HTTPS)
+                
+                var httpHandler = new SocketsHttpHandler
                 {
-                    byte[] data = response.Data.ToByteArray();
-                    _profinetMemory[response.Offset] = data;
+                    // 1. ОТКЛЮЧАЕМ СИСТЕМНЫЕ ПРОКСИ (Антивирусы, VPN, Fiddler)
+                    UseProxy = false,
 
-                    var updatePayload = new
+                    // 2. Игнорируем самоподписанный сертификат
+                    SslOptions = new SslClientAuthenticationOptions
                     {
-                        Protocol = "PROFINET",
-                        Offset = response.Offset,
-                        HexData = BitConverter.ToString(data),
-                        IsGoodQuality = response.IsGoodQuality,
-                        Time = DateTime.Now.ToString("HH:mm:ss")
-                    };
+                        RemoteCertificateValidationCallback = delegate { return true; }
+                    }
+                };
 
-                    await _hubContext.Clients.All.SendAsync("ReceiveProfinetData", updatePayload);
-                }
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
-            {
-                // Стрим закрыт
+                var channelOptions = new GrpcChannelOptions
+                {
+                    HttpHandler = httpHandler
+                };
+
+                using var channel = GrpcChannel.ForAddress(pythonVmUrl, channelOptions);
+                var client = new ProfinetController.ProfinetControllerClient(channel);
+
+                var request = new StartRequest
+                {
+                    InterfaceName = interfaceName,
+                    TargetName = stationName,
+                    ModuleIdent = moduleIdent,
+                    SubmoduleIdent = submoduleIdent,
+                    InputLength = inputLen,
+                    OutputLength = outputLen
+                };
+                var response = await client.StartBruteAsync(request);
+
+                Console.WriteLine($"[C#] Python ответил: {response.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Profinet stream error: {ex.Message}");
+                Console.WriteLine($"[C# ERR] Ошибка связи: {ex.Message}");
             }
         }
 
-        public async Task WriteOutputAsync(int offset, byte[] data)
-        {
-            if (!IsRunning || _ioStream == null) return;
-
-            var request = new IoWriteRequest
-            {
-                Offset = offset,
-                // ИСПРАВЛЕНИЕ 4: Полный путь к ByteString
-                Data = Google.Protobuf.ByteString.CopyFrom(data)
-            };
-
-            await _ioStream.RequestStream.WriteAsync(request);
-        }
-
+        // Заодно метод для остановки
         public async Task StopServerAsync()
         {
-            if (!IsRunning) return;
-
-            _cts?.Cancel();
-            if (_ioStream != null)
+            try
             {
-                await _ioStream.RequestStream.CompleteAsync();
-                _ioStream.Dispose();
+                string pythonVmUrl = "http://192.168.56.101:5001";
+                using var channel = GrpcChannel.ForAddress(pythonVmUrl);
+                var client = new ProfinetController.ProfinetControllerClient(channel);
+
+                Console.WriteLine("[C#] Отправка команды STOP на Python-микросервис...");
+                var response = await client.StopBruteAsync(new StopRequest());
+
+                Console.WriteLine($"[C#] Python ответил: {response.Message}");
             }
-
-            await _grpcClient.StopStackAsync(new StopRequest());
-
-            _grpcChannel?.Dispose();
-            IsRunning = false;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[C# ERR] Ошибка при остановке: {ex.Message}");
+            }
         }
     }
 }

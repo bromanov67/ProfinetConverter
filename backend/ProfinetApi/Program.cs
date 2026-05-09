@@ -1,13 +1,13 @@
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using ProfinetApi.Application.Features.Projects.Commands.CreateProject;
+using ProfinetApi.Application.Interfaces;
 using ProfinetApi.Application.Services;
 using ProfinetApi.Domain.RepoInterfaces;
+using ProfinetApi.Infrastructure.Hubs;
 using ProfinetApi.Infrastructure.Repositories;
 using ProfinetApi.Infrastructure.Services;
-using ProfinetApi.Infrastructure.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
 
 builder.Services.AddControllers()
      .AddJsonOptions(options =>
@@ -15,25 +15,44 @@ builder.Services.AddControllers()
          options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
          options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
      });
-builder.Services.AddSignalR();
-builder.Services.AddEndpointsApiExplorer();
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddSignalR();
+// 1. ƒŒ¡¿¬Àﬂ≈Ã gRPC
+builder.Services.AddGrpc();
+
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
-// œÓ‰ÍÎ˛˜‡ÂÏ MediatR
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(CreateProjectCommand).Assembly));
+
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5000, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http1; // ƒÎˇ Postman
+    });
+    options.ListenAnyIP(5002, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http2; // ƒÎˇ Python gRPC-ÒÚËÏ‡
+    });
+});
 
 builder.Services.AddSingleton<IProjectRepository, InMemoryProjectRepository>();
 
-builder.Services.AddSingleton<IIec104RuntimeService, Iec104RuntimeService>();
-builder.Services.AddHostedService<Iec104RuntimeService>(provider =>
-    (Iec104RuntimeService)provider.GetRequiredService<IIec104RuntimeService>());
+// IEC104 Runtime
+builder.Services.AddSingleton<Iec104RuntimeService>();
+builder.Services.AddSingleton<IIec104RuntimeService>(x => x.GetRequiredService<Iec104RuntimeService>());
+builder.Services.AddHostedService(x => x.GetRequiredService<Iec104RuntimeService>());
 
+// 2. –≈√»—“–»–”≈Ã —≈–¬»— ”œ–¿¬À≈Õ»ﬂ PYTHON œ–Œ÷≈——ŒÃ
 builder.Services.AddSingleton<IProfinetRuntimeService, ProfinetRuntimeService>();
 
-//CORS
+builder.Services.AddScoped<IProfinetScannerService, ProfinetScannerService>();
+builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
+
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowVueApp", policy =>
@@ -45,13 +64,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-
-// Application Services
-builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -60,11 +74,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowVueApp");
-
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<RuntimeHub>("/runtimeHub");
-app.Run("http://localhost:5000");
+
+app.MapGrpcService<ProfinetGrpcService>();
+
+app.Run();

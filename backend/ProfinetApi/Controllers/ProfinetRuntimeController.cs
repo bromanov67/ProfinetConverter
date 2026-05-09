@@ -1,28 +1,41 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using ProfinetApi.Infrastructure.Services;
+using ProfinetApi.Application.DTOs;
+using ProfinetApi.Application.Interfaces;
 
-[ApiController]
-[Route("api/[controller]")]
-public class ProfinetRuntimeController : ControllerBase
+namespace ProfinetApi.Api.Controllers 
 {
-    private readonly IProfinetRuntimeService _profinetService;
-
-    public ProfinetRuntimeController(IProfinetRuntimeService profinetService)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProfinetRuntimeController : ControllerBase
     {
-        _profinetService = profinetService;
-    }
+        private readonly IProfinetRuntimeService _profinetService;
 
-    [HttpPost("start")]
-    public async Task<IActionResult> Start([FromQuery] string interfaceName = "eth0", [FromQuery] string stationName = "plc1")
-    {
-        await _profinetService.StartServerAsync(interfaceName, stationName);
-        return Ok();
-    }
+        public ProfinetRuntimeController(IProfinetRuntimeService profinetService)
+        {
+            _profinetService = profinetService;
+        }
 
-    [HttpPost("stop")]
-    public async Task<IActionResult> Stop()
-    {
-        await _profinetService.StopServerAsync();
-        return Ok();
+        [HttpPost("start")]
+        public async Task<IActionResult> Start([FromBody] StartProfinetDto request)
+        {
+            // Передаем весь объект (или его поля) в сервис
+            await _profinetService.StartServerAsync(
+                request.InterfaceName,
+                request.StationName,
+                request.ModuleIdent,
+                request.SubmoduleIdent,
+                request.InputLength,
+                request.OutputLength
+            );
+
+            return Ok(new { message = "Profinet Runtime (Python) Started" });
+        }
+
+        [HttpPost("stop")]
+        public async Task<IActionResult> Stop()
+        {
+            await _profinetService.StopServerAsync();
+            return Ok(new { message = "Profinet Runtime Stopped" });
+        }
     }
 }

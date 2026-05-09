@@ -57,13 +57,9 @@ export const useDeviceStore = defineStore('device', () => {
 
       if (!response.ok) throw new Error('Failed to create server');
       
-      // Получаем только ID созданного сервера
       const { id } = await response.json();
-
-      // Запрашиваем актуальное дерево проектов (вместе со сгенерированными станциями/интерфейсами)
       await loadProjects();
 
-      // Выделяем свежесозданный сервер в UI
       const newServer = findNodeById(id);
       if (newServer) {
         selectedNode.value = newServer;
@@ -88,11 +84,8 @@ export const useDeviceStore = defineStore('device', () => {
       if (!response.ok) throw new Error('Failed to create interface');
       
       const { id } = await response.json();
-
-      // Обновляем дерево проектов
       await loadProjects();
 
-      // Выделяем созданный интерфейс
       const newInterface = findNodeById(id);
       if (newInterface) {
         selectedNode.value = newInterface;
@@ -125,7 +118,6 @@ export const useDeviceStore = defineStore('device', () => {
   const addIecChannel = async (interfaceId, name) => {
     loading.value = true;
     try {
-      // Обращаемся к нашему новому контроллеру
       const response = await fetch('/api/Channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,11 +127,8 @@ export const useDeviceStore = defineStore('device', () => {
       if (!response.ok) throw new Error('Failed to create IEC channel');
       
       const { id } = await response.json();
-
-      // Обновляем дерево проектов
       await loadProjects();
 
-      // Выделяем созданный канал
       const newChannel = findNodeById(id);
       if (newChannel) {
         selectedNode.value = newChannel;
@@ -191,12 +180,7 @@ export const useDeviceStore = defineStore('device', () => {
 
   // ─── SLOTS & CONFIGURATION ────────────────────────────────────────────────
 
-  /**
-   * Назначает модуль в слот указанной станции.
-   * module = null → очищает слот.
-   */
   const assignModule = (stationId, slotNumber, module) => {
-    // Ищем станцию в реактивном дереве проектов
     for (const proj of projects.value) {
       for (const srv of proj.servers ?? []) {
         for (const iface of srv.interfaces ?? []) {
@@ -206,8 +190,9 @@ export const useDeviceStore = defineStore('device', () => {
           const slot = station.configuration?.slots?.find(s => s.number === slotNumber)
           if (slot) {
             slot.module = module
+            if (!slot.commands) slot.commands = []
+            if (!slot.signals) slot.signals = []
 
-            // Если этот слот сейчас открыт в DetailsPanel — обновляем и там
             const activeSlotId = `${stationId}__slot__${slotNumber}`
             if (selectedNode.value?.id === activeSlotId) {
               selectedNode.value = {
@@ -219,7 +204,7 @@ export const useDeviceStore = defineStore('device', () => {
               }
             }
           }
-          return  // Станция найдена, выходим
+          return 
         }
       }
     }
@@ -233,7 +218,6 @@ export const useDeviceStore = defineStore('device', () => {
       manufacturer: rawConfiguration.manufacturer || "",
       model: rawConfiguration.model || "",
       version: rawConfiguration.version || "",
-      
       shortDesignation: rawConfiguration.shortDesignation || "",
       deviceDescription: rawConfiguration.deviceDescription || "",
       articleNo: rawConfiguration.articleNo || "",
@@ -246,7 +230,6 @@ export const useDeviceStore = defineStore('device', () => {
       deviceNumber: parseInt(rawConfiguration.deviceNumber) || 0,
       consistency: rawConfiguration.consistency || "",
       
-      // ДОБАВЛЯЕМ МАППИНГ СИГНАЛОВ И КОМАНД
       slots: (rawConfiguration.slots || []).map(slot => ({
         number: parseInt(slot.number) || 0,
         label: slot.label || "",
@@ -258,7 +241,6 @@ export const useDeviceStore = defineStore('device', () => {
                             ? slot.module.allowedInSlots.map(num => parseInt(num)) 
                             : []
         } : null,
-        // Собираем сигналы и команды из слота
         signals: (slot.signals || []).map(sig => ({
           id: String(sig.id),
           name: sig.name || "",
@@ -301,11 +283,8 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
-  /** Очищает модуль из слота */
   const clearSlotModule = (stationId, slotNumber) => {
     assignModule(stationId, slotNumber, null)
-
-    // Если открытый слот именно этот — сбрасываем selectedNode
     const activeSlotId = `${stationId}__slot__${slotNumber}`
     if (selectedNode.value?.id === activeSlotId) {
       selectedNode.value = null
@@ -313,7 +292,6 @@ export const useDeviceStore = defineStore('device', () => {
   }
 
   const updateChannelConfiguration = async (channelId, commands, signals) => {
-    // Формируем payload. Вы можете адаптировать это под ваш будущий DTO на бэкенде.
     const payload = {
       commands: commands || [],
       signals: signals || []
@@ -330,13 +308,11 @@ export const useDeviceStore = defineStore('device', () => {
     }
   };
 
-  // ИСПРАВЛЕНА ОШИБКА ЗДЕСЬ
-   const saveAllProjects = async () => {
+  const saveAllProjects = async () => {
     loading.value = true;
     try {
       for (const project of projects.value) {
         
-        // 1. СОХРАНЕНИЕ PROFINET СТАНЦИЙ
         const stations = findAllStations(project);
         for (const station of stations) {
           if (station.configuration) {
@@ -348,7 +324,6 @@ export const useDeviceStore = defineStore('device', () => {
           }
         }
 
-        // 2. СОХРАНЕНИЕ IEC КАНАЛОВ
         const channels = findAllChannels(project);
         for (const channel of channels) {
           try {
@@ -357,50 +332,13 @@ export const useDeviceStore = defineStore('device', () => {
             console.error(`Сетевая ошибка при сохранении канала ${channel.name}`, e);
           }
         }
-
       }
     } finally {
       loading.value = false;
     }
   };
 
-  // Вспомогательная функция для поиска всех каналов
-  const findAllChannels = (node) => {
-    let channels = [];
-    if (node.type === 'channel_iec') {
-      channels.push(node);
-    }
-    if (node.servers) {
-      for (const server of node.servers) channels = channels.concat(findAllChannels(server));
-    }
-    if (node.interfaces) {
-      for (const iface of node.interfaces) channels = channels.concat(findAllChannels(iface));
-    }
-    if (node.channels) {
-      for (const ch of node.channels) channels.push(ch); // Каналы лежат тут
-    }
-    return channels;
-  };
-
-  // --- НОВЫЙ КОД ДЛЯ РЕЖИМА ИСПОЛНЕНИЯ ---
-  const isRuntimeMode = ref(false)
-
-  const toggleRuntimeMode = async () => {
-    try {
-      if (!isRuntimeMode.value) {
-        // ЗАПУСК СЕРВЕРА
-        await fetch('http://localhost:5000/api/runtime/start', { method: 'POST' }); 
-        isRuntimeMode.value = true;
-      } else {
-        // ОСТАНОВКА СЕРВЕРА
-        await fetch('http://localhost:5000/api/runtime/stop', { method: 'POST' });
-        isRuntimeMode.value = false;
-      }
-    } catch (e) {
-      console.error("Ошибка сети", e);
-    }
-  }
-  // ─── HELPERS ──────────────────────────────────────────────────────────────
+  // ─── ПОМОЩНИКИ (HELPERS) ──────────────────────────────────────────────────────────────
 
   const findNodeById = (nodeId, nodes) => {
     const list = nodes ?? projects.value
@@ -419,46 +357,162 @@ export const useDeviceStore = defineStore('device', () => {
     selectedNode.value = node
   }
 
-  // ИСПРАВЛЕНА ЛОГИКА ПОИСКА СТАНЦИЙ
   const findAllStations = (node) => {
     let stations = [];
-    
     if (node.type === 'station') {
       stations.push(node);
     }
-    
-    // Обходим дерево в соответствии с вашей моделью DTO
     if (node.servers) {
-      for (const server of node.servers) {
-        stations = stations.concat(findAllStations(server));
-      }
+      for (const server of node.servers) stations = stations.concat(findAllStations(server));
     }
-    
     if (node.interfaces) {
-      for (const iface of node.interfaces) {
-        stations = stations.concat(findAllStations(iface));
-      }
+      for (const iface of node.interfaces) stations = stations.concat(findAllStations(iface));
     }
-    
     if (node.stations) {
-      for (const station of node.stations) {
-        stations = stations.concat(findAllStations(station));
-      }
+      for (const station of node.stations) stations = stations.concat(findAllStations(station));
     }
-    
     return stations;
+  }
+
+  const findAllChannels = (node) => {
+    let channels = [];
+    if (node.type === 'channel_iec') {
+      channels.push(node);
+    }
+    if (node.servers) {
+      for (const server of node.servers) channels = channels.concat(findAllChannels(server));
+    }
+    if (node.interfaces) {
+      for (const iface of node.interfaces) channels = channels.concat(findAllChannels(iface));
+    }
+    if (node.channels) {
+      for (const ch of node.channels) channels.push(ch);
+    }
+    return channels;
+  };
+
+  // НОВАЯ ФУНКЦИЯ ДЛЯ ПОИСКА ОРИГИНАЛЬНОГО PROFINET СИГНАЛА
+  const findSourceSignal = (sourceId) => {
+    if (!sourceId) return null;
+    
+    // Вспомогательная рекурсивная функция для поиска в любом объекте и массиве
+    const searchDeep = (obj, targetId) => {
+      if (!obj || typeof obj !== 'object') return null;
+
+      // Если это и есть наш сигнал - возвращаем его!
+      if (String(obj.id) === String(targetId) && (obj.byteOffset !== undefined || obj.dataType)) {
+         return obj;
+      }
+
+      // Обходим все ключи объекта (массивы, children, slots, signals, folders и т.д.)
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if (val && typeof val === 'object') {
+          const found = searchDeep(val, targetId);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    // Запускаем поиск по всем проектам
+    return searchDeep(projects.value, sourceId);
+  }
+
+  // --- ЛОГИКА РЕЖИМА ИСПОЛНЕНИЯ ---
+  const isRuntimeMode = ref(false)
+
+  const toggleRuntimeMode = async () => {
+    try {
+      if (!isRuntimeMode.value) {
+        const allChannels = [];
+        for (const project of projects.value) {
+          allChannels.push(...findAllChannels(project));
+        }
+
+        const signalsArray = [];
+
+         allChannels.forEach(channel => {
+          // Добавляем Сигналы
+          (channel.signals || []).forEach(sig => {
+            const sourceSignal = findSourceSignal(sig.sourceId);
+            
+            // ОТЛАДКА: Посмотрим, нашел ли он физический сигнал и какие там байты
+            console.log(`[Склейка Сигнала ${sig.ioa}] Нашли PROFINET?`, sourceSignal ? "ДА" : "НЕТ", "Байт:", sourceSignal?.byteOffset);
+
+            signalsArray.push({
+              name: sig.senderName || `Signal_${sig.ioa || 0}`,
+              dataType: (sig.csDataType === 'FLOAT' || sig.dataType === 'Real') ? 'float32' : 'bool',
+              byteOffset: parseInt(sourceSignal ? sourceSignal.byteOffset : 0) || 0,
+              bitOffset: parseInt(sourceSignal ? sourceSignal.bitOffset : 0) || 0,
+              ioa: parseInt(sig.ioa) || 0
+            });
+          });
+
+          // Добавляем Команды
+          (channel.commands || []).forEach(cmd => {
+            const sourceSignal = findSourceSignal(cmd.sourceId);
+            
+            // ОТЛАДКА: Посмотрим, нашел ли он физическую команду
+            console.log(`[Склейка Команды ${cmd.ioa}] Нашли PROFINET?`, sourceSignal ? "ДА" : "НЕТ", "Байт:", sourceSignal?.byteOffset);
+
+            signalsArray.push({
+              name: cmd.senderName || `Command_${cmd.ioa || 0}`,
+              dataType: (cmd.csDataType === 'FLOAT' || cmd.dataType === 'Real') ? 'float32' : 'bool',
+              byteOffset: parseInt(sourceSignal ? sourceSignal.byteOffset : 0) || 0,
+              bitOffset: parseInt(sourceSignal ? sourceSignal.bitOffset : 0) || 0,
+              ioa: parseInt(cmd.ioa) || 0
+            });
+          });
+        });
+
+        // Убираем дубликаты по IOA (чтобы не было двух сигналов с разными IOA, но одинаковыми именами/смещениями, если это ошибка интерфейса)
+        const uniqueSignals = Array.from(new Map(signalsArray.map(item => [item.ioa, item])).values());
+
+        const runtimeRequest = {
+          interfaceName: "enp0s3", 
+          stationName: "PN-Device",
+          moduleIdent: 4102, 
+          submoduleIdent: 4102,
+          inputLength: 64,
+          outputLength: 64,
+          iecIpAddress: "0.0.0.0",
+          iecPort: 2404,
+          signals: uniqueSignals // <-- Отправляем очищенный массив
+        };
+        
+        console.log("ОТПРАВЛЯЕМЫЙ JSON:", JSON.stringify(runtimeRequest, null, 2));
+
+        const response = await fetch('http://localhost:5000/api/runtime/start', { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(runtimeRequest)
+        }); 
+        
+        if (!response.ok) {
+           const errText = await response.text();
+           throw new Error(errText);
+        }
+
+        isRuntimeMode.value = true;
+      } else {
+        await fetch('http://localhost:5000/api/runtime/stop', { method: 'POST' });
+        isRuntimeMode.value = false;
+      }
+    } catch (e) {
+      console.error("Ошибка сети при смене режима исполнения", e);
+      alert("Ошибка запуска: " + e.message);
+    }
   }
 
   // ─── EXPOSE ───────────────────────────────────────────────────────────────
 
   return {
-    // state
     projects,
     selectedNode,
     loading,
     error,
 
-    // actions
     loadProjects,
     addProject,
     addServer,
@@ -472,7 +526,7 @@ export const useDeviceStore = defineStore('device', () => {
 
     assignModule,     
     clearSlotModule,  
-    saveAllProjects, // ЭКСПОРТИРУЕМ НОВУЮ ФУНКЦИЮ
+    saveAllProjects, 
 
     findNodeById,
     selectNode,

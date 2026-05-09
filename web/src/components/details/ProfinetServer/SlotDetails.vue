@@ -45,7 +45,28 @@
       </tbody>
     </table>
 
-    <!-- ═══ КАТАЛОГ ДЛЯ ЭТОГО СЛОТА ═══ -->
+    <!-- ═══ СУБМОДУЛИ (Отображаются только если они есть в модуле) ═══ -->
+    <div v-if="node.module?.submodules && node.module.submodules.length > 0" class="catalog-section">
+      <div class="catalog-header" @click="expandedSubmodules = !expandedSubmodules">
+        <span class="expand-icon">{{ expandedSubmodules ? '▼' : '▶' }}</span>
+        Встроенные каналы ({{ node.module.submodules.length }})
+      </div>
+      
+      <template v-if="expandedSubmodules">
+        <div class="catalog-list">
+          <div v-for="sm in node.module.submodules" :key="sm.id" class="catalog-item">
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <span class="catalog-item-name">{{ sm.name }}</span>
+              <span style="font-size:11px; color:#666;">
+                Subslot: {{ sm.fixedInSubslots?.[0] }} | In: {{ sm.inputLength }} B | Out: {{ sm.outputLength }} B
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- ═══ КАТАЛОГ ДЛЯ ЭТОГО СЛОТА (Отображается только если есть доступные) ═══ -->
     <div v-if="slotCatalogModules.length > 0" class="catalog-section">
       <div class="catalog-header" @click="expandedCatalog = !expandedCatalog">
         <span class="expand-icon">{{ expandedCatalog ? '▼' : '▶' }}</span>
@@ -70,12 +91,14 @@
         </div>
       </template>
     </div>
-    <div v-else-if="parentStation" class="catalog-empty">
+    
+    <div v-else-if="parentStation && !node.module?.isBuiltIn" class="catalog-empty">
       <p>Нет доступных модулей для этого слота</p>
     </div>
   </div>
 
-  <div v-if="node.module" class="details-actions">
+  <!-- Кнопка очистки доступна только если модуль не встроен намертво -->
+  <div v-if="node.module && !node.module.isBuiltIn" class="details-actions">
     <button class="action-btn danger-btn" @click="clearCurrentSlot">🗑️ Очистить модуль</button>
   </div>
 </template>
@@ -88,9 +111,10 @@ const props = defineProps({ node: Object })
 const store = useDeviceStore()
 
 const expandedCatalog = ref(true)
+const expandedSubmodules = ref(true) // Состояние раскрытия субмодулей
 const moduleSearch = ref('')
 
-// Ищем родительскую станцию, чтобы взять из неё общий каталог GSDML
+// Ищем родительскую станцию
 const parentStation = computed(() => {
   if (props.node.type !== 'slot') return null
   const stationId = props.node.parentStationId
@@ -105,7 +129,7 @@ const parentStation = computed(() => {
   return null
 })
 
-// Фильтруем модули из станции по allowedInSlots для текущего номера слота
+// Фильтруем модули из каталога
 const slotCatalogModules = computed(() => {
   if (!parentStation.value) return []
   const slotNum = props.node.slotNumber
@@ -113,26 +137,37 @@ const slotCatalogModules = computed(() => {
     .filter(m => m.allowedInSlots?.includes(slotNum))
 })
 
-// Поиск по отфильтрованному каталогу
 const filteredSlotModules = computed(() => {
   if (!moduleSearch.value) return slotCatalogModules.value
   const q = moduleSearch.value.toLowerCase()
   return slotCatalogModules.value.filter(m => m.name?.toLowerCase().includes(q))
 })
 
-// Детали слота на основе назначенного модуля
+// Умный подсчет данных (с поддержкой субмодулей и новых полей из XML)
 const slotDetails = computed(() => {
   const mod = props.node.module
   if (!mod) return { dataTypeIn: 'BYTE', dataCountIn: 0, dataTypeOut: 'BYTE', dataCountOut: 0, consistency: '' }
   
-  const id = (mod.id || '').toUpperCase()
-  const numMatch = mod.name?.match(/(\d+)/)
-  const bytes = numMatch ? parseInt(numMatch[1]) : 0
+  let dataIn = mod.inputLength || 0;
+  let dataOut = mod.outputLength || 0;
 
-  if (id.includes('IN')) return { dataTypeIn: 'BYTE', dataCountIn: bytes, dataTypeOut: 'BYTE', dataCountOut: 0, consistency: '' }
-  if (id.includes('OUT')) return { dataTypeIn: 'BYTE', dataCountIn: 0, dataTypeOut: 'BYTE', dataCountOut: bytes, consistency: '' }
-  
-  return { dataTypeIn: 'BYTE', dataCountIn: bytes, dataTypeOut: 'BYTE', dataCountOut: 0, consistency: '' }
+  // Если в модуле есть субмодули - суммируем их данные
+  if (mod.submodules && mod.submodules.length > 0) {
+    dataIn = mod.submodules.reduce((sum, sm) => sum + (sm.inputLength || 0), 0);
+    dataOut = mod.submodules.reduce((sum, sm) => sum + (sm.outputLength || 0), 0);
+  } 
+  // Fallback (резервный вариант) для старых GSDML-модулей без поля inputLength
+  else if (dataIn === 0 && dataOut === 0) {
+    const id = (mod.id || '').toUpperCase()
+    const numMatch = mod.name?.match(/(\d+)/)
+    const bytes = numMatch ? parseInt(numMatch[1]) : 0
+
+    if (id.includes('IN')) dataIn = bytes
+    else if (id.includes('OUT')) dataOut = bytes
+    else dataIn = bytes
+  }
+
+  return { dataTypeIn: 'BYTE', dataCountIn: dataIn, dataTypeOut: 'BYTE', dataCountOut: dataOut, consistency: '' }
 })
 
 const assignModule = (mod) => {
