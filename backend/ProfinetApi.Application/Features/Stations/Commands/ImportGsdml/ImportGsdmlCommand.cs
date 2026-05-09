@@ -1,5 +1,5 @@
 ﻿using MediatR;
-using ProfinetApi.Application.Services;
+using ProfinetApi.Application.ServiceInterfaces;
 
 namespace ProfinetApi.Application.Features.Stations.Commands.ImportGsdml;
 

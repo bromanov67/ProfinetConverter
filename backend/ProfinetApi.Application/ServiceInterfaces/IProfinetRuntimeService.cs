@@ -1,4 +1,4 @@
-﻿namespace ProfinetApi.Application.Interfaces
+﻿namespace ProfinetApi.Application.ServiceInterfaces
 {
     public interface IProfinetRuntimeService
     {

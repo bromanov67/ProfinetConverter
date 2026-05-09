@@ -23,15 +23,12 @@ public class CreateStationCommandHandler : IRequestHandler<CreateStationCommand,
 		ProfinetInterface? targetInterface = null;
 		Project? targetProject = null;
 
-		// Ищем проект и нужный интерфейс
 		foreach (var proj in projects)
 		{
 			foreach (var srv in proj.Servers)
 			{
-				// Ищем интерфейс по Id
 				var iface = srv.Interfaces.FirstOrDefault(i => i.Id == request.InterfaceId);
 
-				// Если нашли, проверяем, что это именно Profinet интерфейс
 				if (iface is ProfinetInterface profinetIface)
 				{
 					targetInterface = profinetIface;
@@ -47,7 +44,6 @@ public class CreateStationCommandHandler : IRequestHandler<CreateStationCommand,
 			throw new KeyNotFoundException("Parent PROFINET interface not found or invalid interface type.");
 		}
 
-		// Создаем станцию
 		var station = new Station("Station", 0)
 		{
 			Name = request.Name,
@@ -55,10 +51,8 @@ public class CreateStationCommandHandler : IRequestHandler<CreateStationCommand,
 			ConfigurationData = null
 		};
 
-		// Добавляем станцию в список интерфейса
 		targetInterface.Stations.Add(station);
 
-		// Сохраняем проект
 		await _repository.UpdateAsync(targetProject, ct);
 
 		return station.Id;

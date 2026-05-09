@@ -39,7 +39,6 @@
             </td>
             <td>{{ item.csDataType }}</td>
             
-            <!-- Новое поле: Byte Offset -->
             <td>
               <input 
                 type="number" 
@@ -50,7 +49,6 @@
               />
             </td>
             
-            <!-- Новое поле: Bit Offset (активно только для Bool) -->
             <td>
               <input 
                 type="number" 
@@ -64,7 +62,6 @@
             </td>
 
             <td>
-              <!-- Выпадающий список всех доступных МЭК команд -->
               <select v-model="item.retranslation" class="select-field">
                 <option value="-">Не выбрано</option>
                 <option v-for="iec in availableIecCommands" :key="iec.id" :value="iec.id">
@@ -99,7 +96,6 @@ const dataTypeMapping = {
 
 const dataTypes = Object.keys(dataTypeMapping);
 
-// Собираем все КОМАНДЫ МЭК 104 из проекта для выпадающего списка
 const availableIecCommands = computed(() => {
   const iecList = [];
   for (const proj of store.projects) {
@@ -122,7 +118,6 @@ const availableIecCommands = computed(() => {
   return iecList;
 });
 
-// ИЩЕМ РЕАЛЬНЫЙ СЛОТ В КОНФИГУРАЦИИ
 const getRealSlot = () => {
   if (!props.node || !props.node.stationId || props.node.slotNumber === undefined) return null;
   
@@ -142,7 +137,6 @@ const getRealSlot = () => {
   return targetStation.configuration.slots.find(s => s.number === props.node.slotNumber);
 };
 
-// РЕАКТИВНАЯ ПРИВЯЗКА К МАССИВУ КОМАНД СЛОТА
 const activeCommands = computed(() => {
   const slot = getRealSlot();
   if (slot) {
@@ -154,7 +148,6 @@ const activeCommands = computed(() => {
 
 const updateCsType = (item) => {
   item.csDataType = dataTypeMapping[item.dataType];
-  // Сбрасываем bitOffset, если тип изменили с Bool на другой
   if (item.dataType !== 'Bool') {
     item.bitOffset = 0;
   }
@@ -178,8 +171,8 @@ const addCommand = () => {
     regAddress: 0,
     dataType: 'Bool',
     csDataType: 'BOOLEAN',
-    byteOffset: 0, // Инициализация смещения
-    bitOffset: 0,  // Инициализация смещения бита
+    byteOffset: 0,
+    bitOffset: 0,
     retranslation: '-'
   });
 };

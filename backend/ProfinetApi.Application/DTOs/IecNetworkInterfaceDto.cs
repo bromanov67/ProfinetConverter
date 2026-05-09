@@ -1,6 +1,4 @@
-﻿namespace ProfinetApi.Application.DTOs
-{
-    public record IecNetworkInterfaceDto(
+﻿public record IecNetworkInterfaceDto(
         Guid Id,
         string Name,
         string Type,
@@ -8,4 +6,3 @@
         string Description,
         List<IecChannelDto> Channels
     );
-}

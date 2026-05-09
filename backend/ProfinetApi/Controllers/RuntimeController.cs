@@ -1,7 +1,7 @@
-﻿using Grpc.Core; // ВАЖНО: Используем Grpc.Core вместо Grpc.Net.Client!
+﻿using Grpc.Core;
 using Microsoft.AspNetCore.Mvc;
 using ProfinetApi.Application.DTOs;
-using ProfinetApi.Application.Services;
+using ProfinetApi.Application.ServiceInterfaces;
 
 namespace ProfinetApi.Api.Controllers
 {
@@ -10,36 +10,28 @@ namespace ProfinetApi.Api.Controllers
     public class RuntimeController : ControllerBase
     {
         private readonly IIec104RuntimeService _runtimeService;
-
-        public RuntimeController(IIec104RuntimeService runtimeService)
+        private readonly ILogger<RuntimeController> _logger;
+        public RuntimeController(IIec104RuntimeService runtimeService, ILogger<RuntimeController> logger)
         {
             _runtimeService = runtimeService;
+            _logger = logger;
         }
 
         [HttpPost("start")]
         public async Task<IActionResult> StartProcess([FromBody] StartProfinetDto requestDto)
         {
+            // 1. Проверка входящих данных
             if (requestDto == null)
             {
-                Console.WriteLine("\n[C#] ОШИБКА: requestDto пришел как NULL!");
-            }
-            else
-            {
-                Console.WriteLine($"\n[C#] Получен POST /start. Интерфейс: {requestDto.InterfaceName}");
-                Console.WriteLine($"[C#] Кол-во сигналов в DTO.Signals = {(requestDto.Signals == null ? "NULL" : requestDto.Signals.Count.ToString())}");
-
-                if (requestDto.Signals != null && requestDto.Signals.Count > 0)
-                {
-                    var firstSignal = requestDto.Signals.First();
-                    Console.WriteLine($"[C#] Первый сигнал из DTO: Name={firstSignal.Name}, DataType={firstSignal.DataType}, Byte={firstSignal.ByteOffset}, IOA={firstSignal.IOA}");
-                }
+                _logger.LogWarning("StartProcess вызван с пустым requestDto.");
+                return BadRequest(new { message = "Некорректный запрос: отсутствуют данные конфигурации." });
             }
 
             Channel channel = null;
             try
             {
-                // 1. ЗАПУСК IEC 104 СЕРВЕРА
-                var iecConfig = requestDto?.Signals?.Select(s => new SignalData
+                // 2. Подготовка конфигурации для МЭК 104
+                var iecConfig = requestDto.Signals?.Select(s => new SignalData
                 {
                     IOA = s.IOA,
                     Identifier = s.Name,
@@ -48,11 +40,10 @@ namespace ProfinetApi.Api.Controllers
                     Type = (s.DataType ?? "").ToLower() == "float32" ? "float" : "bool"
                 }).ToList() ?? new List<SignalData>();
 
-                Console.WriteLine($"[C#] Передаем {iecConfig.Count} элементов в StartServer()");
-
+                // 3. Запуск C# сервера МЭК 104
                 _runtimeService.StartServer(requestDto.IecIpAddress, requestDto.IecPort, iecConfig);
 
-                // 2. ВЫЗОВ PYTHON СКРИПТА
+                // 4. Подключение к Python через gRPC
                 channel = new Channel("192.168.56.102:5005", ChannelCredentials.Insecure);
                 var client = new ProfinetController.ProfinetControllerClient(channel);
 
@@ -66,27 +57,35 @@ namespace ProfinetApi.Api.Controllers
                     OutputLength = requestDto.OutputLength
                 };
 
-                // Добавляем таймаут (опционально, но полезно)
+                // Вызов скрипта
                 var response = await client.StartBruteAsync(request, deadline: DateTime.UtcNow.AddSeconds(10));
 
                 if (response.Success)
+                {
+                    _logger.LogInformation("Режим исполнения успешно запущен.");
                     return Ok(new { message = "Успешный запуск МЭК 104 и Python" });
+                }
                 else
-                    return BadRequest($"Ошибка запуска Python: {response.Message}");
+                {
+                    _logger.LogWarning("Python вернул ошибку при запуске: {Message}", response.Message);
+                    _runtimeService.StopServer();
+                    return BadRequest(new { message = $"Ошибка запуска Python: {response.Message}" });
+                }
             }
             catch (RpcException rpcEx)
             {
+                _logger.LogError(rpcEx, "gRPC ошибка при попытке связаться с Python.");
                 _runtimeService.StopServer();
-                return StatusCode(500, $"gRPC ошибка связи с Python: {rpcEx.Status.Detail}");
+                return StatusCode(500, new { message = $"gRPC ошибка связи с Python: {rpcEx.Status.Detail}" });
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Критическая ошибка в процессе StartProcess.");
                 _runtimeService.StopServer();
-                return StatusCode(500, $"Критическая ошибка: {ex.Message}");
+                return StatusCode(500, new { message = $"Критическая ошибка сервера: {ex.Message}" });
             }
             finally
             {
-                // Обязательно закрываем канал после разового вызова
                 if (channel != null)
                 {
                     await channel.ShutdownAsync();
@@ -97,7 +96,14 @@ namespace ProfinetApi.Api.Controllers
         [HttpPost("stop")]
         public async Task<IActionResult> StopRuntime()
         {
-            _runtimeService.StopServer();
+            try
+            {
+                _runtimeService.StopServer();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при остановке сервера МЭК 104.");
+            }
 
             Channel channel = null;
             try
@@ -106,16 +112,23 @@ namespace ProfinetApi.Api.Controllers
                 var client = new ProfinetController.ProfinetControllerClient(channel);
                 await client.StopBruteAsync(new StopRequest(), deadline: DateTime.UtcNow.AddSeconds(5));
             }
-            catch
+            catch (RpcException rpcEx)
             {
-                // Игнорируем
+                _logger.LogWarning("Python gRPC недоступен при остановке (возможно, уже выключен): {Detail}", rpcEx.Status.Detail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Непредвиденная ошибка при остановке Python.");
             }
             finally
             {
-                if (channel != null) await channel.ShutdownAsync();
+                if (channel != null)
+                {
+                    await channel.ShutdownAsync();
+                }
             }
 
-            return Ok(new { message = "Runtime Stopped" });
+            return Ok(new { message = "Режим исполнения остановлен" });
         }
     }
 }

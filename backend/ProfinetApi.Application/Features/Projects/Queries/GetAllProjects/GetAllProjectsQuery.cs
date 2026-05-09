@@ -1,8 +1,7 @@
 ﻿using MediatR;
-using ProfinetApi.Application.DTOs;
 using ProfinetApi.Domain.Entities.IEC104;
 using ProfinetApi.Domain.Entities.Profinet;
-using ProfinetApi.Domain.RepoInterfaces; // или ProfinetApi.Domain.Interfaces, проверьте свой using
+using ProfinetApi.Domain.RepoInterfaces;
 using System.Text.Json;
 
 namespace ProfinetApi.Application.Features.Projects.Queries.GetAllProjects;
@@ -36,7 +35,6 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
             createdAt = p.CreatedAt,
             servers = p.Servers.Select(server =>
             {
-                // ---- ОБРАБОТКА PROFINET СЕРВЕРА ----
                 if (server is ProfinetServer ps)
                 {
                     return (object)new
@@ -67,8 +65,6 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
                                     }
                                 }
 
-                                // Используем инициализатор объекта. Он работает независимо от порядка полей и 
-                                // не сломается, если вы добавите новые поля в DTO.
                                 return new
                                 {
                                     id = s.Id,
@@ -103,7 +99,6 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
                     };
                 }
 
-                // ---- ОБРАБОТКА IEC 104 СЕРВЕРА ----
                 if (server is IecServer iecs)
                 {
                     return (object)new
@@ -127,7 +122,7 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
                                     {
                                         parsedConfig = JsonSerializer.Deserialize<IecChannelConfigDto>(ch.ConfigurationData, _jsonOptions);
                                     }
-                                    catch { /* Игнорируем ошибки парсинга старых данных */ }
+                                    catch { }
                                 }
 
                                 return new
@@ -149,7 +144,6 @@ public class GetAllProjectsQueryHandler : IRequestHandler<GetAllProjectsQuery, I
                                     bufferTi = ch.BufferTi,
                                     bufferTs = ch.BufferTs,
 
-                                    // ДОБАВЛЯЕМ МАССИВЫ ПРЯМО В КАНАЛ, чтобы фронтенд их увидел
                                     commands = parsedConfig?.Commands ?? new List<IecCommandDto>(),
                                     signals = parsedConfig?.Signals ?? new List<IecSignalDto>()
                                 };

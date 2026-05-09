@@ -19,7 +19,6 @@
           </td>
         </tr>
 
-        <!-- Свойства, специфичные для Ethernet/Сетевого интерфейса -->
         <tr v-if="node.deviceAddress !== undefined">
           <td class="prop-label">Device Address</td>
           <td class="prop-value">
@@ -68,7 +67,6 @@
   </div>
   
   <div class="details-actions">
-    <!-- Кнопка для PROFINET -->
     <button 
       v-if="!isIec" 
       class="action-btn" 
@@ -77,7 +75,6 @@
       + Add Station
     </button>
 
-    <!-- Кнопка для МЭК 104 -->
     <button 
       v-if="isIec" 
       class="action-btn" 
@@ -95,15 +92,10 @@ import { useDeviceStore } from '../../../stores/deviceStore'
 const props = defineProps({ node: Object })
 const store = useDeviceStore()
 
-// Усиленная проверка на МЭК:
-// 1. Проверяем точный тип узла
-// 2. Если бэкенд отдал просто "interface", пытаемся найти родительский сервер в сторе
-//    и смотрим, не является ли родительский сервер МЭК-сервером
 const isIec = computed(() => {
   if (props.node.type === 'interface_iec') return true;
   if (props.node.type === 'interface_profinet') return false;
   
-  // Если тип просто "interface", ищем родителя
   const parentServer = store.nodes?.find(n => 
     n.interfaces?.some(i => i.id === props.node.id) || 
     n.channels?.some(c => c.id === props.node.id)

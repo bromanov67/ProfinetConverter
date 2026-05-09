@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ProfinetApi.Application.DTOs;
-using ProfinetApi.Application.Interfaces;
+using ProfinetApi.Application.ServiceInterfaces;
 
 namespace ProfinetApi.Api.Controllers 
 {
@@ -18,7 +18,6 @@ namespace ProfinetApi.Api.Controllers
         [HttpPost("start")]
         public async Task<IActionResult> Start([FromBody] StartProfinetDto request)
         {
-            // Передаем весь объект (или его поля) в сервис
             await _profinetService.StartServerAsync(
                 request.InterfaceName,
                 request.StationName,

@@ -37,7 +37,7 @@ public class ChannelsController : ControllerBase
         {
             var command = new UpdateChannelConfigurationCommand(id, configuration);
             await _mediator.Send(command);
-            return NoContent(); // 204 Success
+            return NoContent();
         }
         catch (KeyNotFoundException ex)
         {

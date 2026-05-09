@@ -38,7 +38,6 @@ const store = useDeviceStore()
 const emitAddInterface = async () => {
   const name = prompt('Enter Interface Name (e.g. Ethernet):', 'Ethernet')
   if (name) {
-    // Вызываем существующий метод стора, чтобы добавить интерфейс в сервер
     await store.addInterface(props.node.id, name)
   }
 }

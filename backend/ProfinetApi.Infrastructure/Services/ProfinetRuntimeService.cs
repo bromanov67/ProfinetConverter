@@ -1,5 +1,5 @@
 ﻿using Grpc.Net.Client;
-using ProfinetApi.Application.Interfaces;
+using ProfinetApi.Application.ServiceInterfaces;
 using System.Net.Security;
 
 namespace ProfinetApi.Infrastructure.Services
@@ -10,14 +10,12 @@ namespace ProfinetApi.Infrastructure.Services
         {
             try
             {
-                string pythonVmUrl = "http://192.168.56.102:5005"; // Порт Python-сервера (HTTPS)
+                string pythonVmUrl = "http://192.168.56.102:5005";
                 
                 var httpHandler = new SocketsHttpHandler
                 {
-                    // 1. ОТКЛЮЧАЕМ СИСТЕМНЫЕ ПРОКСИ (Антивирусы, VPN, Fiddler)
                     UseProxy = false,
 
-                    // 2. Игнорируем самоподписанный сертификат
                     SslOptions = new SslClientAuthenticationOptions
                     {
                         RemoteCertificateValidationCallback = delegate { return true; }
@@ -51,7 +49,6 @@ namespace ProfinetApi.Infrastructure.Services
             }
         }
 
-        // Заодно метод для остановки
         public async Task StopServerAsync()
         {
             try

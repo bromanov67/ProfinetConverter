@@ -25,7 +25,6 @@ public class CreateServerCommandHandler : IRequestHandler<CreateProfinetServerCo
         var project = await _repository.GetByIdAsync(request.ProjectId, ct);
         if (project == null) throw new KeyNotFoundException("Project not found");
 
-        // 1. Создаем Сервер
         var server = new ProfinetServer()
         {
             Id = Guid.NewGuid(),
@@ -36,7 +35,6 @@ public class CreateServerCommandHandler : IRequestHandler<CreateProfinetServerCo
             MasterClass = "Class 1"
         };
 
-        // 2. АВТОМАТИЧЕСКИ создаем дефолтный Интерфейс
         var iface = new ProfinetInterface()
         {
             Id = Guid.NewGuid(),
@@ -44,7 +42,6 @@ public class CreateServerCommandHandler : IRequestHandler<CreateProfinetServerCo
             Active = true
         };
 
-        // 3. АВТОМАТИЧЕСКИ создаем дефолтную Станцию
         var station = new Station("Station", 1)
         {
             Active = true,
@@ -53,7 +50,6 @@ public class CreateServerCommandHandler : IRequestHandler<CreateProfinetServerCo
             ConfigVersion = "1.0.0"
         };
 
-        // 4. Связываем всё вместе через свойства списков
         iface.Stations.Add(station);
         server.Interfaces.Add(iface);
         project.Servers.Add(server);

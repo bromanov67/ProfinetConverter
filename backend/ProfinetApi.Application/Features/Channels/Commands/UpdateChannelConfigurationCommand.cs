@@ -28,7 +28,6 @@ public class UpdateChannelConfigurationCommandHandler : IRequestHandler<UpdateCh
         Project? targetProject = null;
         IecChannel? targetChannel = null;
 
-        // Ищем канал по всем проектам
         foreach (var project in projects)
         {
             foreach (var server in project.Servers)
@@ -56,11 +55,9 @@ public class UpdateChannelConfigurationCommandHandler : IRequestHandler<UpdateCh
             throw new KeyNotFoundException($"Channel with ID {request.ChannelId} not found.");
         }
 
-        // Сериализуем и сохраняем
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         targetChannel.ConfigurationData = JsonSerializer.Serialize(request.Configuration, options);
 
-        // Обновляем базу
         await _repository.UpdateAsync(targetProject, cancellationToken);
     }
 }

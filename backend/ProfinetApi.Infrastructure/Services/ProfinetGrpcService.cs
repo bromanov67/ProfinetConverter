@@ -1,5 +1,5 @@
 ﻿using Grpc.Core;
-using ProfinetApi.Application.Services;
+using ProfinetApi.Application.ServiceInterfaces;
 
 namespace ProfinetApi.Infrastructure.Services
 {
@@ -7,7 +7,6 @@ namespace ProfinetApi.Infrastructure.Services
     {
         private readonly IIec104RuntimeService _iec104RuntimeService;
 
-        // Внедряем сервис МЭК 104 через конструктор
         public ProfinetGrpcService(IIec104RuntimeService iec104RuntimeService)
         {
             _iec104RuntimeService = iec104RuntimeService;
@@ -25,7 +24,6 @@ namespace ProfinetApi.Infrastructure.Services
                 byte[] cleanData = new byte[rawPayload.Length - 1];
                 Array.Copy(rawPayload, cleanData, cleanData.Length);
 
-                // Передаем "чистые" байты в движок МЭК 104
                 _iec104RuntimeService.UpdateMemoryFromProfinet(cleanData);
             }
 

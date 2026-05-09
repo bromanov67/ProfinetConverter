@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using ProfinetApi.Application.Features.Projects.Commands.CreateProject;
-using ProfinetApi.Application.Interfaces;
-using ProfinetApi.Application.Services;
+using ProfinetApi.Application.ServiceInterfaces;
 using ProfinetApi.Domain.RepoInterfaces;
 using ProfinetApi.Infrastructure.Hubs;
 using ProfinetApi.Infrastructure.Repositories;
@@ -17,7 +16,7 @@ builder.Services.AddControllers()
      });
 
 builder.Services.AddSignalR();
-// 1. днаюбкъел gRPC
+
 builder.Services.AddGrpc();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -31,11 +30,11 @@ builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(5000, listenOptions =>
     {
-        listenOptions.Protocols = HttpProtocols.Http1; // дКЪ Postman
+        listenOptions.Protocols = HttpProtocols.Http1;
     });
     options.ListenAnyIP(5002, listenOptions =>
     {
-        listenOptions.Protocols = HttpProtocols.Http2; // дКЪ Python gRPC-ЯРПХЛЮ
+        listenOptions.Protocols = HttpProtocols.Http2;
     });
 });
 
@@ -46,10 +45,7 @@ builder.Services.AddSingleton<Iec104RuntimeService>();
 builder.Services.AddSingleton<IIec104RuntimeService>(x => x.GetRequiredService<Iec104RuntimeService>());
 builder.Services.AddHostedService(x => x.GetRequiredService<Iec104RuntimeService>());
 
-// 2. пецхярпхпсел яепбхя сопюбкемхъ PYTHON опнжеяянл
 builder.Services.AddSingleton<IProfinetRuntimeService, ProfinetRuntimeService>();
-
-builder.Services.AddScoped<IProfinetScannerService, ProfinetScannerService>();
 builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
 
 // CORS

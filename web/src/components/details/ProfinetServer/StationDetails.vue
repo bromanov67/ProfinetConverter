@@ -19,7 +19,6 @@
           </td>
         </tr>
 
-        <!-- ▶ Конфигурация -->
         <tr class="section-header" @click="toggleSection('config')">
           <td colspan="2"><span class="expand-icon">{{ expanded.config ? '▼' : '▶' }}</span>Конфигурация</td>
         </tr>
@@ -30,7 +29,6 @@
             <td class="prop-value">{{ node.address }}</td>
           </tr>
 
-          <!-- ▶▶ Описание устройства GSDML -->
           <tr class="subsection-header" @click="toggleSection('gsdml')">
             <td colspan="2"><span class="expand-icon">{{ expanded.gsdml ? '▼' : '▶' }}</span>Общее описание устройства (GSDML)</td>
           </tr>
@@ -73,7 +71,6 @@
             </tr>
           </template>
 
-          <!-- ▶▶ IP-протокол -->
           <tr class="subsection-header" @click="toggleSection('ip')">
             <td colspan="2"><span class="expand-icon">{{ expanded.ip ? '▼' : '▶' }}</span>IP-протокол</td>
           </tr>
@@ -88,7 +85,6 @@
             </tr>
           </template>
 
-          <!-- ▶▶ PROFINET -->
           <tr class="subsection-header" @click="toggleSection('profinet')">
             <td colspan="2"><span class="expand-icon">{{ expanded.profinet ? '▼' : '▶' }}</span>PROFINET</td>
           </tr>

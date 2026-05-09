@@ -1,8 +1,4 @@
-﻿using System;
-
-namespace ProfinetApi.Application.DTOs
-{
-    public record IecChannelDto(
+﻿public record IecChannelDto(
         Guid Id,
         string Name,
         string Type,
@@ -10,4 +6,3 @@ namespace ProfinetApi.Application.DTOs
         string Description,
         object Configuration
     );
-}

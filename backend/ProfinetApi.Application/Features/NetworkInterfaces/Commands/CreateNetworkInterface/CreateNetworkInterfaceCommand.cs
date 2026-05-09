@@ -3,11 +3,9 @@ using ProfinetApi.Domain.Entities;
 using ProfinetApi.Domain.Entities.IEC104;
 using ProfinetApi.Domain.Entities.Profinet;
 using ProfinetApi.Domain.RepoInterfaces;
-using ProfinetApi.Application.DTOs; 
 
 namespace ProfinetApi.Application.Features.NetworkInterfaces.Commands.CreateNetworkInterface;
 
-// Меняем возвращаемый тип на object (чтобы можно было вернуть любой из двух DTO)
 public record CreateNetworkInterfaceCommand(Guid ServerId, string Name) : IRequest<object>;
 
 public class CreateNetworkInterfaceCommandHandler : IRequestHandler<CreateNetworkInterfaceCommand, object>
@@ -43,7 +41,6 @@ public class CreateNetworkInterfaceCommandHandler : IRequestHandler<CreateNetwor
                 };
                 ps.AddInterface(pIface);
 
-                // Формируем DTO для Profinet
                 resultDto = new NetworkInterfaceDto(
                     pIface.Id, pIface.Name, "interface_profinet", pIface.Active,
                     pIface.Description, new List<StationDto>()
@@ -60,7 +57,6 @@ public class CreateNetworkInterfaceCommandHandler : IRequestHandler<CreateNetwor
                 };
                 iserver.AddInterface(iIface);
 
-                // Формируем DTO для МЭК
                 resultDto = new IecNetworkInterfaceDto(
                     iIface.Id, iIface.Name, "interface_iec", iIface.Active,
                     iIface.Description, new List<IecChannelDto>()
@@ -72,6 +68,6 @@ public class CreateNetworkInterfaceCommandHandler : IRequestHandler<CreateNetwor
         }
 
         await _repository.UpdateAsync(project, ct);
-        return resultDto; // Возвращаем полный объект
+        return resultDto;
     }
 }

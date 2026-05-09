@@ -1,13 +1,11 @@
 <template>
   <div class="details-panel">
     <template v-if="store.selectedNode">
-      <!-- Общий заголовок для любой выбранной ноды -->
       <div class="details-header">
         <h2>{{ store.selectedNode.name }}</h2>
         <span class="details-type">{{ store.selectedNode.type }}</span>
       </div>
 
-      <!-- НОВЫЙ БЛОК: ВКЛАДКИ (Показываются только в режиме исполнения для узлов МЭК 104) -->
       <div class="tabs-header" v-if="store.isRuntimeMode && isIecNode(store.selectedNode)">
         <button 
           class="tab-btn" 
@@ -21,12 +19,8 @@
         >Данные онлайн</button>
       </div>
 
-      <!-- ========================================================= -->
-      <!-- ВКЛАДКА 1: КОНФИГУРАЦИЯ (Отображение ваших компонентов) -->
-      <!-- ========================================================= -->
       <div class="tab-content" v-show="!store.isRuntimeMode || activeTab === 'config'">
         
-        <!-- 1. Серверы -->
         <ServerDetails 
           v-if="['server', 'server_profinet'].includes(store.selectedNode.type)" 
           :node="store.selectedNode" 
@@ -36,7 +30,6 @@
           :node="store.selectedNode" 
         />
 
-        <!-- 2. Интерфейсы -->
         <ProfinetInterfaceDetails 
           v-else-if="['interface', 'interface_profinet'].includes(store.selectedNode.type)" 
           :node="store.selectedNode" 
@@ -46,7 +39,6 @@
           :node="store.selectedNode" 
         />
 
-        <!-- 3. Станции и Слоты (Profinet) -->
         <StationDetails 
           v-else-if="store.selectedNode.type === 'station'" 
           :node="store.selectedNode" 
@@ -56,13 +48,11 @@
           :node="store.selectedNode" 
         />
 
-        <!-- 4. Каналы (IEC 104) -->
         <IecChannelDetails 
           v-else-if="store.selectedNode.type === 'channel_iec'" 
           :node="store.selectedNode" 
         />
 
-        <!-- 5. Таблицы Сигналов и Команд (Profinet) -->
         <ProfinetSignalDetails 
           v-else-if="store.selectedNode.type === 'signals_folder'" 
           :node="store.selectedNode" 
@@ -72,7 +62,6 @@
           :node="store.selectedNode" 
         />
 
-        <!-- 6. Таблицы Сигналов и Команд (IEC 104) -->
         <IecSignalDetails 
           v-else-if="store.selectedNode.type === 'iec_signals_folder'" 
           :node="store.selectedNode" 
@@ -83,9 +72,6 @@
         />
       </div>
 
-      <!-- ========================================================= -->
-      <!-- ВКЛАДКА 2: ДАННЫЕ ОНЛАЙН (Таблица как на скриншоте OPC) -->
-      <!-- ========================================================= -->
       <div class="tab-content runtime-container" v-show="store.isRuntimeMode && activeTab === 'runtime'">
         <table class="runtime-table">
           <thead>
@@ -134,7 +120,6 @@ import { ref, watch, onUnmounted } from 'vue'
 import { useDeviceStore } from '../stores/deviceStore'
 import * as signalR from '@microsoft/signalr'
 
-// Импорты PROFINET
 import ServerDetails from './details/ProfinetServer/ServerDetails.vue'
 import ProfinetInterfaceDetails from './details/ProfinetServer/ProfinetInterfaceDetails.vue'
 import StationDetails from './details/ProfinetServer/StationDetails.vue'
@@ -142,7 +127,6 @@ import SlotDetails from './details/ProfinetServer/SlotDetails.vue'
 import ProfinetSignalDetails from './details/ProfinetServer/ProfinetSignalDetails.vue'
 import ProfinetCommandDetails from './details/ProfinetServer/ProfinetCommandDetails.vue'
 
-// Импорты IEC
 import IecInterfaceDetails from './details/IecServer/IecInterfaceDetails.vue'
 import IecChannelDetails from './details/IecServer/IecChannelDetails.vue'
 import IecServerDetails from './details/IecServer/IecServerDetails.vue'
@@ -151,10 +135,8 @@ import IecCommandDetails from './details/IecServer/IecCommandDetails.vue'
 
 const store = useDeviceStore()
 
-// --- ЛОГИКА ВКЛАДОК И РЕЖИМА ИСПОЛНЕНИЯ ---
 const activeTab = ref('config')
 
-// Определяем, относится ли узел к МЭК 104 (чтобы показывать вкладки)
 const isIecNode = (node) => {
   if (!node) return false;
   const t = node.type;
@@ -165,7 +147,6 @@ const isIecNode = (node) => {
          t === 'iec_commands_folder';
 };
 
-// При переключении режима исполнения меняем вкладку
 watch(() => store.isRuntimeMode, (newVal) => {
   if (newVal && isIecNode(store.selectedNode)) {
     activeTab.value = 'runtime';
@@ -174,7 +155,6 @@ watch(() => store.isRuntimeMode, (newVal) => {
   }
 });
 
-// Переключаем вкладку обратно на config, если перешли на узел, который не поддерживает онлайн данные
 watch(() => store.selectedNode, (newNode) => {
   if (store.isRuntimeMode && isIecNode(newNode)) {
     activeTab.value = 'runtime';
@@ -183,19 +163,14 @@ watch(() => store.selectedNode, (newNode) => {
   }
 });
 
-// --- ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ТАБЛИЦЫ RUNTIME ---
-// --- ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ТАБЛИЦЫ RUNTIME ---
 const runtimeData = ref([]);
 
-// Создаем подключение к хабу
 const connection = new signalR.HubConnectionBuilder()
   .withUrl('http://localhost:5000/runtimeHub')
   .withAutomaticReconnect()
   .build();
 
-// Слушаем событие прихода данных от C#
 connection.on('ReceiveRuntimeData', (data) => {
-  // 1. ПРОВЕРЯЕМ БЛОКИРОВКУ
   if (!store.isRuntimeMode || !store.selectedNode || activeTab.value !== 'runtime') {
       return;
   }
@@ -210,15 +185,12 @@ connection.on('ReceiveRuntimeData', (data) => {
 
   const baseId = `IEC104.${store.selectedNode.name}.`;
 
-  // Преобразуем полученные JSON-данные в формат таблицы
   runtimeData.value = data.map((item) => {
-    // Безопасный парсинг значения (превращаем в строку, чтобы избежать NaN)
     let displayValue = "0";
     if (item.value !== null && item.value !== undefined) {
        displayValue = String(item.value);
     }
     
-    // Если это float, можно обрезать лишние нули (опционально)
     if (item.type === 'float' && !isNaN(parseFloat(displayValue))) {
         displayValue = parseFloat(displayValue).toString();
     }
@@ -228,7 +200,7 @@ connection.on('ReceiveRuntimeData', (data) => {
       identifier: baseId + item.identifier,
       region: 'NONE',
       address: item.ioa, 
-      value: displayValue, // <-- Теперь тут всегда корректная строка
+      value: displayValue,
       quality: item.quality || 'GOOD',
       time: timeStr,
       type: item.type,
@@ -238,7 +210,6 @@ connection.on('ReceiveRuntimeData', (data) => {
   });
 });
 
-// Запускаем/останавливаем WebSocket соединение в зависимости от режима исполнения
 watch(() => store.isRuntimeMode, async (isRuntime) => {
   try {
     if (isRuntime && isIecNode(store.selectedNode)) {
@@ -259,7 +230,6 @@ watch(() => store.isRuntimeMode, async (isRuntime) => {
   }
 });
 
-// --- СТАРЫЕ ФУНКЦИИ ---
 const addServer = async () => {
   const name = prompt('Enter Server Name:', 'PLC Server')
   if (name) {
@@ -269,7 +239,6 @@ const addServer = async () => {
 </script>
 
 <style>
-/* --- ОБЩИЕ СТИЛИ --- */
 .details-panel {
   flex: 1;
   background: white;
@@ -333,7 +302,6 @@ const addServer = async () => {
 .section-header td { background: #d0d0d0 !important; font-weight: 600; cursor: pointer; color: #333 !important; }
 .subsection-header td { background: #dcdcdc !important; font-style: italic; cursor: pointer; color: #555 !important; }
 
-/* --- НОВЫЕ СТИЛИ ДЛЯ ВКЛАДОК И RUNTIME --- */
 .tabs-header {
   display: flex;
   background: #f5f5f5;
@@ -364,10 +332,9 @@ const addServer = async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Важно, чтобы компоненты внутри скроллились сами */
+  overflow: hidden;
 }
 
-/* Стили таблицы Runtime */
 .runtime-container {
   background: #fff;
   overflow: auto;

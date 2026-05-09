@@ -1,6 +1,6 @@
-﻿namespace ProfinetApi.Application.DTOs
-{
-    public record NetworkInterfaceDto(
+﻿using ProfinetApi.Application.DTOs;
+
+public record NetworkInterfaceDto(
         Guid Id,
         string Name,
         string Type,
@@ -8,4 +8,3 @@
         string Description,
         List<StationDto> Stations
     );
-}

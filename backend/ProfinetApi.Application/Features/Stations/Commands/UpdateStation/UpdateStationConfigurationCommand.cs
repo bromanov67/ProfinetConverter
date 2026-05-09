@@ -1,8 +1,7 @@
 ﻿using MediatR;
-using ProfinetApi.Application.DTOs;
-using ProfinetApi.Domain.RepoInterfaces;
 using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Entities.Profinet; // Обязательно добавить этот using для ProfinetServer и ProfinetInterface
+using ProfinetApi.Domain.Entities.Profinet;
+using ProfinetApi.Domain.RepoInterfaces;
 using System.Text.Json;
 
 namespace ProfinetApi.Application.Features.Stations.Commands.UpdateStationConfiguration;
@@ -28,22 +27,19 @@ public class UpdateStationConfigurationCommandHandler : IRequestHandler<UpdateSt
         Project? targetProject = null;
         Station? targetStation = null;
 
-        // 1. Ищем станцию во всех проектах, серверах и интерфейсах
         foreach (var project in projects)
         {
             foreach (var server in project.Servers)
             {
-                // Приводим к ProfinetServer, так как IEC серверы не имеют станций
                 if (server is ProfinetServer profinetServer)
                 {
-                    // Приводим интерфейсы к ProfinetInterface, так как у InterfaceBase нет Stations
                     foreach (var netInterface in profinetServer.Interfaces.OfType<ProfinetInterface>())
                     {
                         var foundStation = netInterface.Stations.FirstOrDefault(s => s.Id == request.StationId);
                         if (foundStation != null)
                         {
                             targetStation = foundStation;
-                            targetProject = project; // Сразу запоминаем проект
+                            targetProject = project;
                             break;
                         }
                     }
@@ -53,17 +49,14 @@ public class UpdateStationConfigurationCommandHandler : IRequestHandler<UpdateSt
             if (targetStation != null) break;
         }
 
-        // 2. Если станция не найдена, бросаем исключение
         if (targetStation == null || targetProject == null)
         {
             throw new KeyNotFoundException($"Station with ID {request.StationId} not found.");
         }
 
-        // 3. Обновляем конфигурацию
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         targetStation.ConfigurationData = JsonSerializer.Serialize(request.Configuration, options);
 
-        // 4. Сохраняем изменения (вызываем UpdateAsync для найденного проекта)
         await _repository.UpdateAsync(targetProject, cancellationToken);
     }
 }

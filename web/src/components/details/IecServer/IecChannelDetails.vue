@@ -23,7 +23,6 @@
         <tr>
           <td class="prop-label">IP адрес</td>
           <td class="prop-value">
-            <!-- Используем node.configuration.ipAddress, если конфигурация существует, иначе можно обращаться напрямую -->
             <input type="text" v-model="iecConfig.ipAddress" class="input-field" placeholder="0.0.0.0" />
           </td>
         </tr>
@@ -99,8 +98,6 @@
       </tbody>
     </table>
   </div>
-  
-  <!-- Если для Канала МЭК нужны какие-то дочерние сущности, кнопки можно добавить сюда -->
 </template>
 
 <script setup>
@@ -108,10 +105,8 @@ import { computed } from 'vue'
 
 const props = defineProps({ node: Object })
 
-// Создаем fallback объект, чтобы не было ошибок, если configuration не инициализировано
 const iecConfig = computed(() => {
   if (!props.node.configuration) {
-    // В идеале это должно создаваться на бэкенде при добавлении Канала
     props.node.configuration = {
       ipAddress: '0.0.0.0',
       port: 2404,

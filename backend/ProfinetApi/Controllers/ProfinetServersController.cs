@@ -1,7 +1,6 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using ProfinetApi.Application.Features.Servers.Commands.CreateServer;
-using ProfinetApi.Application.Features.Servers.Commands.DiscoverDevices;
 
 namespace ProfinetApi.Controllers;
 
@@ -27,29 +26,6 @@ public class ProfinetServersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(ex.Message);
-        }
-    }
-
-    [HttpPost("discovery")]
-    public async Task<IActionResult> Discover([FromBody] DiscoverDevicesCommand command)
-    {
-        try
-        {
-            // Контроллер просто ждет результата 3.5 секунды
-            var result = await _mediator.Send(command);
-
-            // Если ничего не нашли, можно вернуть 200 OK, но с Success = false (и пустым массивом Devices), 
-            // чтобы фронтенд красиво показал сообщение "Устройства не найдены"
-            return Ok(result);
-        }
-        catch (TaskCanceledException)
-        {
-            // Если пользователь (или браузер) отменил запрос до истечения 3.5 секунд
-            return StatusCode(499, new { message = "Запрос был отменен пользователем." });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = $"Ошибка сканирования: {ex.Message}" });
         }
     }
 }

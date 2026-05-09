@@ -1,31 +1,25 @@
 <template>
   <div class="app-container">
     <Header />
-    
-    <!-- Состояние загрузки -->
     <div v-if="store.loading" class="loading-overlay">
       <div class="spinner"></div>
       <p>Загрузка...</p>
     </div>
 
-    <!-- Состояние ошибки -->
     <div v-else-if="store.error" class="error-overlay">
       <p>❌ {{ store.error }}</p>
       <button @click="store.loadProjects()">Повторить</button>
     </div>
 
-    <!-- Основной контент -->
     <div v-else class="app-content">
       <div class="tree-panel">
         <div class="tree-header">
           <h3>Projects</h3>
           <div class="header-actions">
-            <!-- Кнопка создания проекта -->
             <button class="add-btn project-btn" @click="handleCreateProject">
               + Project
             </button>
             
-            <!-- Кнопка сохранения проекта (вместо + Server) -->
             <button 
               class="add-btn save-btn" 
               @click="handleSaveProject" 
@@ -46,12 +40,10 @@
         </div>
 
         <div class="tree-container">
-          <!-- Пустое состояние -->
           <div v-if="projects.length === 0" class="empty-state">
             Нет проектов. Создайте первый!
           </div>
 
-          <!-- Дерево -->
           <TreeNode
             v-for="project in projects"
             :key="project.id"
@@ -61,8 +53,6 @@
           />
         </div>
       </div>
-      
-      <!-- Панель деталей -->
       <DetailsPanel />
     </div>
   </div>
@@ -78,14 +68,12 @@ import DetailsPanel from './components/DetailsPanel.vue'
 
 const store = useDeviceStore()
 
-// Деструктурируем реактивные переменные
 const { projects, selectedNode } = storeToRefs(store)
 
 onMounted(() => {
   store.loadProjects()
 })
 
-// --- Логика создания проекта ---
 const handleCreateProject = async () => {
   const name = prompt('Введите имя нового проекта:', 'My Profinet Project')
   
@@ -94,17 +82,15 @@ const handleCreateProject = async () => {
   }
 }
 
-// --- Логика сохранения проекта ---
 const handleSaveProject = async () => {
   if (projects.value.length === 0) {
     alert('Нет проектов для сохранения!');
     return;
   }
 
-  // Если вы хотите сохранять весь стейт или конкретный выбранный проект:
   try {
-    store.loading = true; // Можно включить лоадер на время сохранения
-    await store.saveAllProjects(); // Вызов метода из store (см. ниже)
+    store.loading = true;
+    await store.saveAllProjects();
     alert('Изменения успешно сохранены!');
   } catch (error) {
     alert('Ошибка при сохранении: ' + error.message);
@@ -128,7 +114,6 @@ const handleSaveProject = async () => {
   overflow: hidden;
 }
 
-/* --- Загрузка и Ошибки --- */
 .loading-overlay,
 .error-overlay {
   display: flex;
@@ -172,7 +157,6 @@ const handleSaveProject = async () => {
   cursor: pointer;
 }
 
-/* --- Боковая панель (Дерево) --- */
 .tree-panel {
   flex: 0 0 320px;
   background: white;
@@ -184,7 +168,7 @@ const handleSaveProject = async () => {
 
 .tree-header {
   display: flex;
-  flex-direction: column; /* Изменил на колонку для кнопок */
+  flex-direction: column;
   gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid #e0e8f0;
@@ -249,7 +233,6 @@ const handleSaveProject = async () => {
   font-size: 13px;
 }
 
-/* Скроллбар */
 .tree-container::-webkit-scrollbar {
   width: 6px;
 }

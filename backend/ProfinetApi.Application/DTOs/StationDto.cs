@@ -1,6 +1,4 @@
-﻿namespace ProfinetApi.Application.DTOs
-{
-    public record StationDto(
+﻿public record StationDto(
         Guid Id,
         string Name,
         string Type,
@@ -9,4 +7,3 @@
         string Description,
         StationConfigDto Configuration
     );
-}

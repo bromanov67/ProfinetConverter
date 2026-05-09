@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
-namespace ProfinetApi.Application.Services;
+namespace ProfinetApi.Application.ServiceInterfaces;
 
 public class ConfigurationService : IConfigurationService
 {
@@ -48,25 +48,23 @@ public class ConfigurationService : IConfigurationService
 
                 foreach (var item in dataItems)
                 {
-                    // 1. Попытка взять явный Length (для OctetString, массивов и т.д.)
                     if (int.TryParse(item.Attribute("Length")?.Value, out var len))
                     {
                         totalLength += len;
                         continue;
                     }
 
-                    // 2. Вычисляем длину динамически из названия типа (например, "Unsigned32" -> 32 бита -> 4 байта)
                     var dataType = item.Attribute("DataType")?.Value;
                     if (!string.IsNullOrEmpty(dataType))
                     {
-                        var match = Regex.Match(dataType, @"\d+$"); // Ищем число в конце строки
+                        var match = Regex.Match(dataType, @"\d+$");
                         if (match.Success && int.TryParse(match.Value, out var bits))
                         {
-                            totalLength += Math.Max(1, bits / 8); // Делим биты на 8, чтобы получить байты
+                            totalLength += Math.Max(1, bits / 8);
                         }
                         else if (dataType.Equals("Bit", StringComparison.OrdinalIgnoreCase))
                         {
-                            totalLength += 1; // Одиночные биты без явной длины округляем до байта для маппинга
+                            totalLength += 1;
                         }
                     }
                 }
@@ -100,16 +98,12 @@ public class ConfigurationService : IConfigurationService
 
             var slotsList = new List<object>();
 
-            // ОПРЕДЕЛЯЕМ ТИП ПЛК:
-            // Если в каталоге нет доступных для вставки модулей, это Компактный ПЛК (Siemens SIPROTEC)
             bool isCompactPlc = !catalogModules.Any();
 
             if (isCompactPlc)
             {
-                // КОМПАКТНЫЙ ПЛК (Siemens) - Создаем слоты под каждый сигнал
                 var virtualSubmodules = doc.Descendants(ns + "VirtualSubmoduleItem").ToList();
 
-                // Слот 1: Главная голова DAP
                 var headName = Resolve(mi?.Element(ns + "Name")?.Attribute("TextId")?.Value) ?? "Built-in Base I/O";
                 slotsList.Add(new
                 {
@@ -125,7 +119,6 @@ public class ConfigurationService : IConfigurationService
                     }
                 });
 
-                // Слоты 2+: Отдельные слоты для каждого виртуального канала
                 int slotCounter = 2;
                 foreach (var vsm in virtualSubmodules)
                 {
@@ -137,12 +130,12 @@ public class ConfigurationService : IConfigurationService
                     slotsList.Add(new
                     {
                         number = slotCounter,
-                        label = $"Channel {fixedSubslot}", // Будет отображаться как Channel 1000
+                        label = $"Channel {fixedSubslot}",
                         module = new
                         {
                             id = vsmId,
                             name = name,
-                            isBuiltIn = true, // Запрет на удаление
+                            isBuiltIn = true,
                             inputLength = GetIoLength(vsm, "Input"),
                             outputLength = GetIoLength(vsm, "Output")
                         }
@@ -152,21 +145,18 @@ public class ConfigurationService : IConfigurationService
             }
             else
             {
-                // КЛАССИЧЕСКИЙ ПЛК (Модульный) - Создаем пустые слоты
                 var physicalSlotsRaw = dap?.Attribute("PhysicalSlots")?.Value ?? "0..0";
                 var parts = physicalSlotsRaw.Split("..");
 
-                // Определяем максимальный слот. Если "0..64", то maxSlot = 64.
                 int maxSlot = parts.Length == 2 && int.TryParse(parts[1], out var mx) ? mx :
                              (int.TryParse(physicalSlotsRaw, out var single) ? single : 0);
 
-                // В PROFINET нулевой слот зарезервирован под саму голову (DAP). Модули I/O идут с 1.
                 for (int i = 1; i <= maxSlot; i++)
                 {
                     slotsList.Add(new
                     {
                         number = i,
-                        label = $"Slot {i}", // Никаких попыток угадать имя. Просто "Slot X".
+                        label = $"Slot {i}",
                         module = (object?)null
                     });
                 }
@@ -212,12 +202,6 @@ public class ConfigurationService : IConfigurationService
         return result;
     }
 
-    private static string StripByteCount(string name)
-    {
-        var m = Regex.Match(name, @"^(.+?)\s+(?:not used|\d+\s+Byte)");
-        return m.Success ? m.Groups[1].Value.Trim() : name;
-    }
-
     private async Task<(Project?, Station?)> FindProjectAndStationAsync(Guid stationId, CancellationToken ct)
     {
         var projects = await _repository.GetAllAsync(ct);
@@ -226,10 +210,8 @@ public class ConfigurationService : IConfigurationService
         {
             foreach (var server in proj.Servers)
             {
-                // Используем паттерн-матчинг (is) для безопасного приведения к ProfinetServer
                 if (server is ProfinetServer profinetServer)
                 {
-                    // Фильтруем только ProfinetInterface, так как только у них есть Stations
                     foreach (var iface in profinetServer.Interfaces.OfType<ProfinetInterface>())
                     {
                         var station = iface.Stations.FirstOrDefault(s => s.Id == stationId);
@@ -244,5 +226,4 @@ public class ConfigurationService : IConfigurationService
 
         return (null, null);
     }
-
 }

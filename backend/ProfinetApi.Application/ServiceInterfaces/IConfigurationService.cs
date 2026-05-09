@@ -1,8 +1,7 @@
-﻿namespace ProfinetApi.Application.Services
+﻿namespace ProfinetApi.Application.ServiceInterfaces
 {
     public interface IConfigurationService
     {
-        // Импорт GSDML файла для станции
         Task ImportGsdmlAsync(Guid stationId, Stream fileStream, string fileName, CancellationToken ct);
     }
 }

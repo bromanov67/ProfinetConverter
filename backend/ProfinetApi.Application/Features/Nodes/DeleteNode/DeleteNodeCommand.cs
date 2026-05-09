@@ -16,25 +16,17 @@ public class DeleteNodeCommandHandler : IRequestHandler<DeleteNodeCommand>
 
     public async Task Handle(DeleteNodeCommand request, CancellationToken ct)
     {
-        // Ищем проект, в котором есть этот узел.
-        // Так как БД нет, перебираем все проекты в памяти (это быстро).
         var allProjects = await _repository.GetAllAsync(ct);
 
         foreach (var project in allProjects)
         {
-            // Предполагаем, что у Project есть метод RemoveNodeRecursive,
-            // который возвращает true, если узел был найден и удален.
             bool wasRemoved = project.RemoveNodeRecursive(request.NodeId);
 
             if (wasRemoved)
             {
-                // Если нужно явно обновить состояние (для будущего)
                 await _repository.UpdateAsync(project, ct);
-                return; // Удалили и вышли
+                return;
             }
         }
-
-        // Если дошли сюда — узел не найден. Можно кинуть исключение или проигнорировать.
-        // throw new KeyNotFoundException($"Node {request.NodeId} not found");
     }
 }

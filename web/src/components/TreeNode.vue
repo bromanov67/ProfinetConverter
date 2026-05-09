@@ -14,10 +14,8 @@
       <span class="node-name">{{ node.name }}</span>
     </div>
 
-    <!-- Context Menu -->
     <div v-if="showMenu" class="context-menu" :style="menuPosition">
       
-      <!-- Уровень Проекта -->
       <button v-if="node.type === 'project'" class="context-menu-item" @click="emitAdd('server_profinet')">
         + PROFINET Сервер
       </button>
@@ -25,12 +23,10 @@
         + МЭК 104 Сервер
       </button>
       
-      <!-- Уровень Сервера -->
       <button v-if="node.type === 'server' || node.type === 'server_profinet' || node.type === 'server_iec104'" class="context-menu-item" @click="emitAdd('interface')">
         + Add Interface
       </button>
       
-            <!-- Уровень Интерфейса (PROFINET) -->
       <button 
         v-if="(node.type === 'interface_profinet' || node.type === 'interface') && !isIecNode" 
         class="context-menu-item" 
@@ -39,7 +35,6 @@
         + Add Station
       </button>
       
-      <!-- Уровень Интерфейса (МЭК 104) -->
       <button 
         v-if="node.type === 'interface_iec' || (node.type === 'interface' && isIecNode)" 
         class="context-menu-item" 
@@ -48,29 +43,23 @@
         + Add Channel (Канал)
       </button>
 
-      <!-- Разделитель (не показываем для слотов и папок сигналов) -->
       <div v-if="['slot', 'signals_folder', 'commands_folder', 'iec_signals_folder', 'iec_commands_folder'].includes(node.type) === false" class="divider"></div>
       
-      <!-- Специфичные действия -->
       <button v-if="node.type === 'station'" class="context-menu-item" @click="openFileImport">
         📁 Import GSDML
       </button>
       
-      <!-- Действия для слотов -->
       <button v-if="node.type === 'slot' && node.module" class="context-menu-item delete-item" @click="handleClearSlot">
         🗑️ Очистить модуль
       </button>
       
-      <!-- Удаление (для всех кроме слотов) -->
       <button v-if="node.type !== 'slot'" class="context-menu-item delete-item" @click="handleDelete">
         🗑️ Delete
       </button>
     </div>
 
-    <!-- Скрытый инпут для импорта GSDML -->
     <input ref="fileInput" type="file" accept=".gsdml,.xml" style="display:none" @change="handleFileImport" />
 
-    <!-- Рекурсивный рендер дочерних элементов -->
     <div v-if="isExpanded && childNodes.length" class="node-children">
       <TreeNode
         v-for="child in childNodes"
@@ -96,7 +85,6 @@ const showMenu = ref(false)
 const menuPosition = ref({ top: '0px', left: '0px' })
 const fileInput = ref(null)
 
-// Computed свойства состояния
 const isSelected = computed(() => props.selectedId === props.node.id)
 
 const isSlotHighlighted = computed(() =>
@@ -105,13 +93,11 @@ const isSlotHighlighted = computed(() =>
   store.hoveredModule?.allowedInSlots?.includes(props.node.slotNumber)
 )
 
-// ИСПРАВЛЕНИЕ 2: Ищем в store.projects вместо store.nodes
 const isIecNode = computed(() => {
   if (props.node.type === 'interface_iec') return true;
   if (props.node.type === 'interface_profinet') return false;
   
   let parentServer = null;
-  // Проходим по дереву проектов, чтобы найти сервер, которому принадлежит этот интерфейс
   for (const proj of store.projects || []) {
     for (const srv of proj.servers || []) {
       if (srv.interfaces && srv.interfaces.some(i => i.id === props.node.id)) {
@@ -125,22 +111,19 @@ const isIecNode = computed(() => {
   return parentServer?.type === 'server_iec104';
 });
 
-// ГЕНЕРАЦИЯ ДОЧЕРНИХ УЗЛОВ
 const childNodes = computed(() => {
   if (!props.node) return []
 
-  // 1. Стандартные вложенные массивы данных с бекенда
   const directChildren = props.node.children 
                       || props.node.servers 
                       || props.node.interfaces 
                       || props.node.stations 
-                      || props.node.channels // <--- ВАЖНО: берем каналы для интерфейса МЭК
+                      || props.node.channels
 
   if (directChildren && directChildren.length > 0) {
     return directChildren
   }
 
-  // 2. Для Станции (Profinet) генерируем Слоты
   if (props.node.type === 'station') {
     const slots = props.node.configuration?.slots
     if (slots && slots.length > 0) {
@@ -157,12 +140,10 @@ const childNodes = computed(() => {
     }
   }
 
-    // 3. Для Слота (с назначенным модулем) генерируем папки Сигналов/Команд
   if (props.node.type === 'slot' && props.node.module) {
     const mod = props.node.module;
     const children = [];
     
-    // Считаем данные так же, как в SlotDetails
     let dataIn = mod.inputLength || 0;
     let dataOut = mod.outputLength || 0;
 
@@ -170,17 +151,15 @@ const childNodes = computed(() => {
       dataIn = mod.submodules.reduce((sum, sm) => sum + (sm.inputLength || 0), 0);
       dataOut = mod.submodules.reduce((sum, sm) => sum + (sm.outputLength || 0), 0);
     } 
-    // Fallback: если длины 0, но это реальный модуль, просто покажем обе папки на всякий случай
     else if (dataIn === 0 && dataOut === 0) {
       const id = (mod.id || '').toUpperCase();
       if (id.includes('IN')) dataIn = 1;
       if (id.includes('OUT')) dataOut = 1;
       if (!id.includes('IN') && !id.includes('OUT')) {
-        dataIn = 1; dataOut = 1; // Показываем обе, чтобы пользователь сам решил
+        dataIn = 1; dataOut = 1;
       }
     }
 
-    // Добавляем папку "Сигналы", если модуль имеет входы
     if (dataIn > 0) {
       children.push({
         id: `${props.node.id}__signals`,
@@ -192,7 +171,6 @@ const childNodes = computed(() => {
       });
     }
 
-    // Добавляем папку "Команды", если модуль имеет выходы
     if (dataOut > 0) {
       children.push({
         id: `${props.node.id}__commands`,
@@ -207,7 +185,6 @@ const childNodes = computed(() => {
     return children;
   }
 
-  // 5. Каналы (IEC 104) генерируют свои папки сигналов/команд
   if (props.node.type === 'channel_iec') {
     return [
       { id: `${props.node.id}_cmds`, type: 'iec_commands_folder', name: 'Команды', channelId: props.node.id },
@@ -218,7 +195,6 @@ const childNodes = computed(() => {
   return []
 })
 
-// ИКОНКИ
 const getIcon = (type) => {
   switch (type?.toLowerCase()) {
     case 'project':           return '📁'
@@ -238,22 +214,24 @@ const getIcon = (type) => {
   }
 }
 
-// КОНТЕКСТНОЕ МЕНЮ
 const showContextMenu = (event) => {
   if (props.node.type === 'slot' && !props.node.module) return;
 
-  menuPosition.value = { top: event.pageY + 'px', left: event.pageX + 'px' }
-  showMenu.value = true
-  
-  setTimeout(() => document.addEventListener('click', hideContextMenu), 0)
+  document.dispatchEvent(new Event('click'));
+
+  setTimeout(() => {
+    menuPosition.value = { top: event.pageY + 'px', left: event.pageX + 'px' };
+    showMenu.value = true;
+    
+    document.addEventListener('click', hideContextMenu);
+  }, 0);
 }
 
 const hideContextMenu = () => {
-  showMenu.value = false
-  document.removeEventListener('click', hideContextMenu)
+  showMenu.value = false;
+  document.removeEventListener('click', hideContextMenu);
 }
 
-// ДЕЙСТВИЯ (ОБРАБОТЧИКИ)
 const openFileImport = () => { 
   fileInput.value?.click()
   hideContextMenu() 
@@ -392,7 +370,6 @@ const emitAdd = async (actionType) => {
   border-left: 1px solid #eee;
 }
 
-/* Context Menu Styles */
 .context-menu {
   position: fixed;
   background: white;

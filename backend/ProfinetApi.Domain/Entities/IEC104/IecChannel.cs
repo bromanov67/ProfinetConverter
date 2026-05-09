@@ -1,6 +1,4 @@
-﻿namespace ProfinetApi.Domain.Entities.IEC104;
-
-public class IecChannel
+﻿public class IecChannel
 {
     public Guid Id { get; set; }
     public Guid InterfaceId { get; set; }

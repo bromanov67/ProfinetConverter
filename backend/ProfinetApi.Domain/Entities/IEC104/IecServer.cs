@@ -1,4 +1,4 @@
-﻿namespace ProfinetApi.Domain.Entities.IEC104;
+﻿using ProfinetApi.Domain.Entities;
 
 public class IecServer : ServerBase
 {

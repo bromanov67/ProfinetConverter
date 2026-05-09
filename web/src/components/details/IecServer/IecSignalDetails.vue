@@ -1,7 +1,6 @@
 <template>
   <div class="details-content">
     
-    <!-- ВЕРХНЯЯ ЧАСТЬ: Сигналы IEC (Зона для Drop) -->
     <div 
       class="top-pane" 
       @dragover.prevent="onDragOver" 
@@ -58,12 +57,10 @@
       </div>
     </div>
 
-    <!-- РАЗДЕЛИТЕЛЬ (визуальный) -->
     <div class="pane-resizer">
       <div class="resizer-line"></div>
     </div>
 
-    <!-- НИЖНЯЯ ЧАСТЬ: Доступные сигналы из Profinet (Draggable) -->
     <div class="bottom-pane">
       <div class="table-container">
         <table class="data-table">
@@ -120,7 +117,6 @@ const store = useDeviceStore();
 
 const isDraggingOver = ref(false);
 
-// Ищем реальный канал в дереве
 const getRealChannel = () => {
   if (!props.node || !props.node.channelId) return null;
   for (const proj of store.projects) {
@@ -134,7 +130,6 @@ const getRealChannel = () => {
   return null;
 };
 
-// Реактивный список добавленных IEC сигналов
 const activeIecSignals = computed(() => {
   const channel = getRealChannel();
   if (channel) {
@@ -144,11 +139,9 @@ const activeIecSignals = computed(() => {
   return [];
 });
 
-// Собираем все сигналы из PROFINET
 const availableProfinetSignals = computed(() => {
   const allSignals = [];
   
-  // Получаем ID уже перенесенных сигналов
   const usedSourceIds = activeIecSignals.value.map(sig => sig.sourceId).filter(Boolean);
 
   for (const proj of store.projects) {
@@ -160,10 +153,8 @@ const availableProfinetSignals = computed(() => {
           const slots = station.configuration?.slots || [];
           for (const slot of slots) {
             
-            // ВАЖНО: берем slot.signals, а не commands!
             if (slot.signals && Array.isArray(slot.signals)) {
               for (const sig of slot.signals) {
-                // Если сигнал уже используется — скрываем
                 if (usedSourceIds.includes(sig.id)) continue;
 
                 const sourcePath = `${proj.name}/${srv.name}/${iface.name}/${station.name}/${slot.number.toString().padStart(2, '0')} : ${slot.label || 'Module'} /Сигналы/...`;
@@ -195,13 +186,13 @@ const addSignal = (overrideData = {}) => {
   const nextIndex = channel.signals.length + 1;
   channel.signals.push({
     id: Date.now().toString() + Math.random().toString().slice(2, 6),
-    sourceId: overrideData.id || null, // Связь с Profinet-сигналом
+    sourceId: overrideData.id || null,
     checked: true,
     node: overrideData.node || 'Root',
     senderName: overrideData.name || `Signal_${nextIndex.toString().padStart(2, '0')}`,
     asdu: 1,
-    ioa: 100 + nextIndex, // Для сигналов IOA обычно начинается со 101, в отличие от команд
-    frameType: 'M_SP_NA_1', // Дефолтный тип кадра для сигналов
+    ioa: 100 + nextIndex,
+    frameType: 'M_SP_NA_1',
     csDataType: overrideData.dataType || 'BOOLEAN'
   });
 };
@@ -215,7 +206,6 @@ const addSignalGroup = () => {
   }
 };
 
-// --- DRAG AND DROP ---
 const onDragStart = (event, signal) => {
   event.dataTransfer.dropEffect = 'copy';
   event.dataTransfer.effectAllowed = 'copy';
@@ -250,7 +240,7 @@ const onDrop = (event) => {
 .details-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: #444; }
 
 .top-pane { flex: 6; display: flex; flex-direction: column; overflow: hidden; transition: all 0.2s ease; }
-/* Подсветка верхней панели при наведении (dragover) */
+
 .drag-over-active {
   background: #556b2f !important;
   box-shadow: inset 0 0 10px rgba(154, 205, 50, 0.5);

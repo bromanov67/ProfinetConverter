@@ -1,7 +1,5 @@
 <template>
   <div class="details-content">
-    
-    <!-- ВЕРХНЯЯ ЧАСТЬ: Команды IEC (Зона для Drop) -->
     <div 
       class="top-pane" 
       @dragover.prevent="onDragOver" 
@@ -58,12 +56,10 @@
       </div>
     </div>
 
-    <!-- РАЗДЕЛИТЕЛЬ (визуальный) -->
     <div class="pane-resizer">
       <div class="resizer-line"></div>
     </div>
 
-    <!-- НИЖНЯЯ ЧАСТЬ: Доступные команды из Profinet (Draggable) -->
     <div class="bottom-pane">
       <div class="table-container">
         <table class="data-table">
@@ -84,7 +80,6 @@
             </tr>
           </thead>
           <tbody>
-            <!-- Добавлены атрибуты для Drag & Drop -->
             <tr 
               v-for="pn in availableProfinetCommands" 
               :key="pn.id" 
@@ -146,7 +141,6 @@ const activeIecCommands = computed(() => {
 const availableProfinetCommands = computed(() => {
   const allCommands = [];
   
-  // Собираем ID уже использованных команд (предполагаем, что мы сохраняем оригинальный id в поле sourceId)
   const usedSourceIds = activeIecCommands.value.map(cmd => cmd.sourceId).filter(Boolean);
 
   for (const proj of store.projects) {
@@ -159,7 +153,6 @@ const availableProfinetCommands = computed(() => {
           for (const slot of slots) {
             if (slot.commands && Array.isArray(slot.commands)) {
               for (const cmd of slot.commands) {
-                // Если команда уже перенесена наверх, пропускаем её
                 if (usedSourceIds.includes(cmd.id)) continue;
 
                 const sourcePath = `${proj.name}/${srv.name}/${iface.name}/${station.name}/${slot.number.toString().padStart(2, '0')} : ${slot.label || 'Module'} /Команды/...`;
@@ -208,23 +201,17 @@ const addCommandGroup = () => {
   }
 };
 
-// --- DRAG AND DROP ЛОГИКА ---
 
-// 1. При начале перетаскивания сохраняем объект команды в JSON
 const onDragStart = (event, command) => {
   event.dataTransfer.dropEffect = 'copy';
   event.dataTransfer.effectAllowed = 'copy';
-  // Сериализуем данные команды, чтобы передать их
   event.dataTransfer.setData('application/json', JSON.stringify(command));
 };
 
-// 2. Для того чтобы drop сработал, dragover должен вызывать event.preventDefault() 
-// (это мы делаем прямо в template через @dragover.prevent)
 const onDragOver = (event) => {
   isDraggingOver.value = true;
 };
 
-// 3. Обработка броска (Drop)
 const onDrop = (event) => {
   isDraggingOver.value = false;
   try {
@@ -233,7 +220,7 @@ const onDrop = (event) => {
     const droppedCommand = JSON.parse(rawData);
     
     addCommand({
-      id: droppedCommand.id, // <--- Передаем ID
+      id: droppedCommand.id,
       name: droppedCommand.name,
       node: droppedCommand.node,
       dataType: droppedCommand.dataType
@@ -248,7 +235,7 @@ const onDrop = (event) => {
 .details-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: #444; }
 
 .top-pane { flex: 6; display: flex; flex-direction: column; overflow: hidden; transition: all 0.2s ease; }
-/* Подсветка верхней панели при наведении (dragover) */
+
 .drag-over-active {
   background: #556b2f !important; /* Легкий зеленый оттенок */
   box-shadow: inset 0 0 10px rgba(154, 205, 50, 0.5);

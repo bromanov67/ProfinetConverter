@@ -3,16 +3,12 @@ import { ref } from 'vue'
 import apiClient from '../services/apiClient'
 
 export const useDeviceStore = defineStore('device', () => {
-
-  // ─── STATE ───────────────────────────────────────────────────────────────
   const projects     = ref([])
   const selectedNode = ref(null)
   const hoveredModule = ref(null)
   const loading     = ref(false)
   const error       = ref(null)
   
-  // ─── PROJECTS ────────────────────────────────────────────────────────────
-
   const loadProjects = async () => {
     loading.value = true
     error.value   = null
@@ -39,8 +35,6 @@ export const useDeviceStore = defineStore('device', () => {
       loading.value = false
     }
   }
-
-  // ─── SERVERS / INTERFACES / STATIONS ─────────────────────────────────────
 
   const addServer = async (projectId, name, serverType) => {
     loading.value = true;
@@ -141,8 +135,6 @@ export const useDeviceStore = defineStore('device', () => {
     }
   }
 
-  // ─── DELETE ───────────────────────────────────────────────────────────────
-
   const deleteNode = async (nodeId) => {
     loading.value = true
     try {
@@ -158,8 +150,6 @@ export const useDeviceStore = defineStore('device', () => {
       loading.value = false
     }
   }
-
-  // ─── GSDML IMPORT ─────────────────────────────────────────────────────────
 
   const importGsdml = async (stationId, file) => {
     loading.value = true
@@ -177,8 +167,6 @@ export const useDeviceStore = defineStore('device', () => {
       loading.value = false
     }
   }
-
-  // ─── SLOTS & CONFIGURATION ────────────────────────────────────────────────
 
   const assignModule = (stationId, slotNumber, module) => {
     for (const proj of projects.value) {
@@ -338,8 +326,6 @@ export const useDeviceStore = defineStore('device', () => {
     }
   };
 
-  // ─── ПОМОЩНИКИ (HELPERS) ──────────────────────────────────────────────────────────────
-
   const findNodeById = (nodeId, nodes) => {
     const list = nodes ?? projects.value
     for (const node of list) {
@@ -391,20 +377,16 @@ export const useDeviceStore = defineStore('device', () => {
     return channels;
   };
 
-  // НОВАЯ ФУНКЦИЯ ДЛЯ ПОИСКА ОРИГИНАЛЬНОГО PROFINET СИГНАЛА
   const findSourceSignal = (sourceId) => {
     if (!sourceId) return null;
     
-    // Вспомогательная рекурсивная функция для поиска в любом объекте и массиве
     const searchDeep = (obj, targetId) => {
       if (!obj || typeof obj !== 'object') return null;
 
-      // Если это и есть наш сигнал - возвращаем его!
       if (String(obj.id) === String(targetId) && (obj.byteOffset !== undefined || obj.dataType)) {
          return obj;
       }
 
-      // Обходим все ключи объекта (массивы, children, slots, signals, folders и т.д.)
       for (const key of Object.keys(obj)) {
         const val = obj[key];
         if (val && typeof val === 'object') {
@@ -415,11 +397,9 @@ export const useDeviceStore = defineStore('device', () => {
       return null;
     };
 
-    // Запускаем поиск по всем проектам
     return searchDeep(projects.value, sourceId);
   }
 
-  // --- ЛОГИКА РЕЖИМА ИСПОЛНЕНИЯ ---
   const isRuntimeMode = ref(false)
 
   const toggleRuntimeMode = async () => {
@@ -433,11 +413,9 @@ export const useDeviceStore = defineStore('device', () => {
         const signalsArray = [];
 
          allChannels.forEach(channel => {
-          // Добавляем Сигналы
           (channel.signals || []).forEach(sig => {
             const sourceSignal = findSourceSignal(sig.sourceId);
             
-            // ОТЛАДКА: Посмотрим, нашел ли он физический сигнал и какие там байты
             console.log(`[Склейка Сигнала ${sig.ioa}] Нашли PROFINET?`, sourceSignal ? "ДА" : "НЕТ", "Байт:", sourceSignal?.byteOffset);
 
             signalsArray.push({
@@ -449,11 +427,9 @@ export const useDeviceStore = defineStore('device', () => {
             });
           });
 
-          // Добавляем Команды
           (channel.commands || []).forEach(cmd => {
             const sourceSignal = findSourceSignal(cmd.sourceId);
             
-            // ОТЛАДКА: Посмотрим, нашел ли он физическую команду
             console.log(`[Склейка Команды ${cmd.ioa}] Нашли PROFINET?`, sourceSignal ? "ДА" : "НЕТ", "Байт:", sourceSignal?.byteOffset);
 
             signalsArray.push({
@@ -466,7 +442,6 @@ export const useDeviceStore = defineStore('device', () => {
           });
         });
 
-        // Убираем дубликаты по IOA (чтобы не было двух сигналов с разными IOA, но одинаковыми именами/смещениями, если это ошибка интерфейса)
         const uniqueSignals = Array.from(new Map(signalsArray.map(item => [item.ioa, item])).values());
 
         const runtimeRequest = {
@@ -478,7 +453,7 @@ export const useDeviceStore = defineStore('device', () => {
           outputLength: 64,
           iecIpAddress: "0.0.0.0",
           iecPort: 2404,
-          signals: uniqueSignals // <-- Отправляем очищенный массив
+          signals: uniqueSignals
         };
         
         console.log("ОТПРАВЛЯЕМЫЙ JSON:", JSON.stringify(runtimeRequest, null, 2));
@@ -504,8 +479,6 @@ export const useDeviceStore = defineStore('device', () => {
       alert("Ошибка запуска: " + e.message);
     }
   }
-
-  // ─── EXPOSE ───────────────────────────────────────────────────────────────
 
   return {
     projects,

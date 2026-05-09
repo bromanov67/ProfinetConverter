@@ -33,7 +33,6 @@
             </td>
             <td>{{ item.csDataType }}</td>
 
-            <!-- Поле: Byte Offset -->
             <td>
               <input 
                 type="number" 
@@ -44,7 +43,6 @@
               />
             </td>
             
-            <!-- Поле: Bit Offset (активно только для Bool) -->
             <td>
               <input 
                 type="number" 
@@ -58,7 +56,6 @@
             </td>
 
             <td>
-              <!-- Выпадающий список всех доступных МЭК сигналов -->
               <select v-model="item.archive" class="select-field">
                 <option value="-">Не выбрано</option>
                 <option v-for="iec in availableIecSignals" :key="iec.id" :value="iec.id">
@@ -86,7 +83,6 @@ const dataTypeMapping = {
 };
 const dataTypes = Object.keys(dataTypeMapping);
 
-// Собираем все сигналы МЭК 104 из проекта для выпадающего списка
 const availableIecSignals = computed(() => {
   const iecList = [];
   for (const proj of store.projects) {
@@ -109,7 +105,6 @@ const availableIecSignals = computed(() => {
   return iecList;
 });
 
-// Функция поиска реального слота в конфигурации
 const getRealSlot = () => {
   if (!props.node || !props.node.stationId || props.node.slotNumber === undefined) return null;
   
@@ -129,7 +124,6 @@ const getRealSlot = () => {
   return targetStation.configuration.slots.find(s => s.number === props.node.slotNumber);
 };
 
-// Реактивно вычисляем массив сигналов из реального слота
 const activeSignals = computed(() => {
   const slot = getRealSlot();
   if (slot) {
@@ -141,7 +135,6 @@ const activeSignals = computed(() => {
 
 const updateCsType = (item) => {
   item.csDataType = dataTypeMapping[item.dataType];
-  // Сбрасываем bitOffset при смене типа с Bool на другой
   if (item.dataType !== 'Bool') {
     item.bitOffset = 0;
   }
@@ -164,8 +157,8 @@ const addSignal = () => {
     regAddress: 0,
     dataType: 'Bool',
     csDataType: 'BOOLEAN',
-    byteOffset: 0, // Инициализация Byte Offset
-    bitOffset: 0,  // Инициализация Bit Offset
+    byteOffset: 0,
+    bitOffset: 0,
     archive: '-' 
   });
 };
@@ -195,4 +188,4 @@ const addSignalGroup = () => {
 .editable-input:disabled { cursor: not-allowed; }
 .select-field { width: 100%; background: #5a5a5a; color: #eee; border: 1px solid #777; padding: 2px 4px; outline: none; }
 .select-field:focus { border-color: #999; }
-</style>ы
+</style>

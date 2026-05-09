@@ -5,7 +5,6 @@ namespace ProfinetApi.Infrastructure.Repositories;
 
 public class InMemoryProjectRepository : IProjectRepository
 {
-    // Хранилище в памяти
     private readonly List<Project> _projects = new();
 
     public Task AddAsync(Project project, CancellationToken ct = default)

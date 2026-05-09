@@ -5,7 +5,6 @@ using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Application.Features.Channels.Commands.CreateChannel;
 
-// Команда принимает ID интерфейса и имя канала
 public record CreateChannelCommand(Guid InterfaceId, string Name) : IRequest<Guid>;
 
 public class CreateChannelCommandHandler : IRequestHandler<CreateChannelCommand, Guid>
@@ -24,15 +23,12 @@ public class CreateChannelCommandHandler : IRequestHandler<CreateChannelCommand,
         IecInterface? targetInterface = null;
         Project? targetProject = null;
 
-        // Ищем проект и нужный интерфейс
         foreach (var proj in projects)
         {
             foreach (var srv in proj.Servers)
             {
-                // Ищем интерфейс по Id
                 var iface = srv.Interfaces.FirstOrDefault(i => i.Id == request.InterfaceId);
 
-                // Если нашли, проверяем, что это именно IecInterface (МЭК 104)
                 if (iface is IecInterface iecIface)
                 {
                     targetInterface = iecIface;
@@ -48,7 +44,6 @@ public class CreateChannelCommandHandler : IRequestHandler<CreateChannelCommand,
             throw new KeyNotFoundException("Parent IEC interface not found or invalid interface type.");
         }
 
-        // Создаем канал с дефолтными настройками
         var channel = new IecChannel
         {
             Id = Guid.NewGuid(),
@@ -58,10 +53,8 @@ public class CreateChannelCommandHandler : IRequestHandler<CreateChannelCommand,
             Port = 2404
         };
 
-        // Добавляем канал в список интерфейса
         targetInterface.Channels.Add(channel);
 
-        // Сохраняем проект
         await _repository.UpdateAsync(targetProject, ct);
 
         return channel.Id;
