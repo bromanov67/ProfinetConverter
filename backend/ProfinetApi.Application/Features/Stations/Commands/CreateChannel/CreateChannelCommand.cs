@@ -1,6 +1,5 @@
 ﻿using MediatR;
 using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Entities.IEC104;
 using ProfinetApi.Domain.RepoInterfaces;
 
 namespace ProfinetApi.Application.Features.Channels.Commands.CreateChannel;

@@ -5,6 +5,7 @@ using ProfinetApi.Domain.RepoInterfaces;
 using ProfinetApi.Infrastructure.Hubs;
 using ProfinetApi.Infrastructure.Repositories;
 using ProfinetApi.Infrastructure.Services;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +13,8 @@ builder.Services.AddControllers()
      .AddJsonOptions(options =>
      {
          options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
      });
 
 builder.Services.AddSignalR();

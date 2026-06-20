@@ -1,6 +1,4 @@
-﻿using ProfinetApi.Application.DTOs;
-
-public record Iec104ServerDto(
+﻿public record Iec104ServerDto(
         Guid Id,
         string Name,
         bool Active,

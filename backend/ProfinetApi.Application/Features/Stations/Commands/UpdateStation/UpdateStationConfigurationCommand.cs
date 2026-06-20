@@ -31,30 +31,36 @@ public class UpdateStationConfigurationCommandHandler : IRequestHandler<UpdateSt
         {
             foreach (var server in project.Servers)
             {
-                if (server is ProfinetServer profinetServer)
+                if (server is not ProfinetServer profinetServer)
+                    continue;
+
+                foreach (var netInterface in profinetServer.Interfaces.OfType<ProfinetInterface>())
                 {
-                    foreach (var netInterface in profinetServer.Interfaces.OfType<ProfinetInterface>())
-                    {
-                        var foundStation = netInterface.Stations.FirstOrDefault(s => s.Id == request.StationId);
-                        if (foundStation != null)
-                        {
-                            targetStation = foundStation;
-                            targetProject = project;
-                            break;
-                        }
-                    }
+                    var foundStation = netInterface.Stations.FirstOrDefault(s => s.Id == request.StationId);
+                    if (foundStation is null)
+                        continue;
+
+                    targetStation = foundStation;
+                    targetProject = project;
+                    break;
                 }
-                if (targetStation != null) break;
+
+                if (targetStation is not null)
+                    break;
             }
-            if (targetStation != null) break;
+
+            if (targetStation is not null)
+                break;
         }
 
-        if (targetStation == null || targetProject == null)
-        {
+        if (targetStation is null || targetProject is null)
             throw new KeyNotFoundException($"Station with ID {request.StationId} not found.");
-        }
 
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
         targetStation.ConfigurationData = JsonSerializer.Serialize(request.Configuration, options);
 
         await _repository.UpdateAsync(targetProject, cancellationToken);

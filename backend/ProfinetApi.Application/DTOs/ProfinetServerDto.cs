@@ -1,6 +1,4 @@
-﻿using ProfinetApi.Application.DTOs;
-
-public record ProfinetServerDto(
+﻿public record ProfinetServerDto(
         Guid Id,
         string Name,
         bool Active,
