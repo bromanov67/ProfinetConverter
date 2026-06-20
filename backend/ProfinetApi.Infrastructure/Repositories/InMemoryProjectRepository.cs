@@ -6,6 +6,7 @@ namespace ProfinetApi.Infrastructure.Repositories;
 public class InMemoryProjectRepository : IProjectRepository
 {
     private readonly List<Project> _projects = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     public Task AddAsync(Project project, CancellationToken ct = default)
     {
@@ -37,5 +38,18 @@ public class InMemoryProjectRepository : IProjectRepository
     public Task UpdateAsync(Project project, CancellationToken ct = default)
     {
         return Task.CompletedTask;
+    }
+    public async Task ReplaceAllAsync(List<Project> projects, CancellationToken cancellationToken)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            _projects.Clear();
+            _projects.AddRange(projects);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 }

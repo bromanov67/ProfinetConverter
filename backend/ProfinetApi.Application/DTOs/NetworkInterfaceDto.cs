@@ -1,6 +1,4 @@
-﻿using ProfinetApi.Application.DTOs;
-
-public record NetworkInterfaceDto(
+﻿public record NetworkInterfaceDto(
         Guid Id,
         string Name,
         string Type,

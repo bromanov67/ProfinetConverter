@@ -1,16 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Text.Json.Serialization;
 
 namespace ProfinetApi.Domain.Entities;
 
 public class Project
 {
+    [JsonInclude]
     public Guid Id { get; private set; }
-    public string Name { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    [JsonInclude]
     public DateTime CreatedAt { get; private set; }
 
+    [JsonInclude]
     public List<ServerBase> Servers { get; private set; } = new();
+
+    public Project()
+    {
+    }
 
     public Project(string name)
     {
@@ -21,7 +28,7 @@ public class Project
 
     public void AddServer(ServerBase server)
     {
-        server.ProjectId = this.Id;
+        server.ProjectId = Id;
         Servers.Add(server);
     }
 

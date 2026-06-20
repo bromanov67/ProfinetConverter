@@ -31,14 +31,13 @@ public class StationsController : ControllerBase
         }
     }
 
-    [HttpPost("{id}/import-gsdml")]
+    [HttpPost("{id:guid}/import-gsdml")]
     public async Task<IActionResult> ImportGsdml(Guid id, IFormFile file)
     {
         if (file == null || file.Length == 0)
-            return BadRequest("File is empty");
+            return BadRequest("File is empty.");
 
-        using var stream = file.OpenReadStream();
-
+        await using var stream = file.OpenReadStream();
         var command = new ImportGsdmlCommand(id, stream, file.FileName);
 
         try
@@ -52,10 +51,11 @@ public class StationsController : ControllerBase
         }
     }
 
-    [HttpPut("{id}/configuration")]
+    [HttpPut("{id:guid}/configuration")]
     public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] StationConfigDto configuration)
     {
         var command = new UpdateStationConfigurationCommand(id, configuration);
+
         try
         {
             await _mediator.Send(command);

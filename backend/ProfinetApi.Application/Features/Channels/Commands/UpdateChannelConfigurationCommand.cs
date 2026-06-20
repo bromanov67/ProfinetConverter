@@ -1,7 +1,5 @@
 ﻿using MediatR;
-using ProfinetApi.Application.DTOs;
 using ProfinetApi.Domain.Entities;
-using ProfinetApi.Domain.Entities.IEC104;
 using ProfinetApi.Domain.RepoInterfaces;
 using System.Text.Json;
 

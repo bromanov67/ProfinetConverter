@@ -22,11 +22,9 @@ namespace ProfinetApi.Infrastructure.Services
             _hubContext = hubContext;
         }
 
-        public bool IsRunning => _server != null && _server.IsRunning();
-
         public void StartServer(string ip, int port, IEnumerable<SignalData> config)
         {
-            if (IsRunning) return;
+            StopServer();
 
             _plcMemory.Clear();
             Console.WriteLine($"[IEC104] StartServer вызван. Конфигов получено: {config?.Count() ?? 0}");
@@ -51,7 +49,11 @@ namespace ProfinetApi.Infrastructure.Services
 
             Console.WriteLine($"[IEC104] _plcMemory.Count после инициализации = {_plcMemory.Count}");
 
+            int serverPort = (port == 0 || port == 2404) ? 2405 : port;
+
             _server = new Server();
+
+            _server.SetLocalPort(serverPort);
 
             _server.SetInterrogationHandler((parameter, connection, asdu, qoi) =>
             {

@@ -1,6 +1,5 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using ProfinetApi.Application.DTOs;
 using ProfinetApi.Application.Features.Projects.Commands.CreateProject;
 using ProfinetApi.Application.Features.Projects.Queries.GetAllProjects;
 using ProfinetApi.Application.Features.Projects.Queries.GetProjectById;

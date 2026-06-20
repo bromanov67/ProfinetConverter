@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using ProfinetApi.Application.DTOs;
 using ProfinetApi.Application.ServiceInterfaces;
 
 namespace ProfinetApi.Api.Controllers 
